@@ -2,8 +2,20 @@
 import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 
+// OpenCorporates API Token
+const API_TOKEN = 'YOUR_API_TOKEN';
+
 interface Supplier {
-  [key: string]: string;
+  [key: string]: string | any;
+  company?: {
+    name: string;
+    company_number: string;
+    jurisdiction_code: string;
+    incorporation_date?: string;
+    company_type?: string;
+    registry_url?: string;
+    opencorporates_url?: string;
+  } | null;
 }
 
 interface FileUploaderProps {
@@ -13,6 +25,7 @@ interface FileUploaderProps {
 const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -47,6 +60,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
     }
 
     setLoading(true);
+    setProcessingStatus('Parsing CSV file...');
     
     // We need to include Papa Parse via CDN
     if (typeof window.Papa === 'undefined') {
@@ -63,7 +77,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
   const parseCSV = (file: File) => {
     window.Papa.parse(file, {
       header: true,
-      complete: (results: { data: Supplier[], errors: any[], meta: any }) => {
+      complete: async (results: { data: Supplier[], errors: any[], meta: any }) => {
         console.log("Raw CSV data:", results.data); // Add debug logging
         
         // Filter out empty rows and map to a standardized format
@@ -95,6 +109,9 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           setLoading(false);
           return;
         }
+
+        // Call OpenCorporates API to match supplier names to companies
+        await matchSuppliersWithCompanies(suppliers);
         
         onFileLoaded(suppliers);
         setLoading(false);
@@ -106,6 +123,60 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
         setLoading(false);
       }
     });
+  };
+
+  const matchSuppliersWithCompanies = async (suppliers: Supplier[]) => {
+    let matchedCount = 0;
+    
+    setProcessingStatus(`Matching suppliers with OpenCorporates... (0/${suppliers.length})`);
+    
+    for (let i = 0; i < suppliers.length; i++) {
+      const supplier = suppliers[i];
+      setProcessingStatus(`Matching suppliers with OpenCorporates... (${i}/${suppliers.length})`);
+      
+      try {
+        // Encode the supplier name for the URL
+        const encodedName = encodeURIComponent(supplier.name);
+        const url = `https://api.opencorporates.com/v0.4/companies/search?q=${encodedName}&api_token=${API_TOKEN}`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.results && 
+            data.results.companies && 
+            data.results.companies.length > 0) {
+          
+          // Get the first company match
+          const companyData = data.results.companies[0].company;
+          
+          // Add the company data to the supplier object
+          supplier.company = {
+            name: companyData.name,
+            company_number: companyData.company_number,
+            jurisdiction_code: companyData.jurisdiction_code,
+            incorporation_date: companyData.incorporation_date,
+            company_type: companyData.company_type,
+            registry_url: companyData.registry_url,
+            opencorporates_url: companyData.opencorporates_url
+          };
+          
+          matchedCount++;
+        } else {
+          // Mark as unmatched
+          supplier.company = null;
+        }
+        
+        // Add a small delay to avoid hitting rate limits
+        await new Promise(resolve => setTimeout(resolve, 250));
+        
+      } catch (error) {
+        console.error(`Error matching supplier ${supplier.name}:`, error);
+        supplier.company = null;
+      }
+    }
+    
+    setProcessingStatus(`Completed matching: ${matchedCount} of ${suppliers.length} suppliers matched`);
+    return matchedCount;
   };
 
   const handleButtonClick = () => {
@@ -150,7 +221,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
       </div>
       
       <h3 className="text-lg font-medium mb-2 text-center">
-        {loading ? "Processing..." : "Upload Supplier CSV"}
+        {loading ? processingStatus || "Processing..." : "Upload Supplier CSV"}
       </h3>
       
       <p className="text-muted-foreground text-sm text-center max-w-md">

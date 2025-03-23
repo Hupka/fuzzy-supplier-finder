@@ -2,9 +2,19 @@
 import React, { useState } from "react";
 import FileUploader from "@/components/FileUploader";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 interface Supplier {
-  [key: string]: string;
+  [key: string]: string | any;
+  company?: {
+    name: string;
+    company_number: string;
+    jurisdiction_code: string;
+    incorporation_date?: string;
+    company_type?: string;
+    registry_url?: string;
+    opencorporates_url?: string;
+  } | null;
 }
 
 const Index = () => {
@@ -19,8 +29,11 @@ const Index = () => {
     window.suppliers = parsedSuppliers;
     
     // Log to console to confirm data is parsed
-    console.log("Parsed suppliers:", parsedSuppliers);
+    console.log("Parsed suppliers with company matches:", parsedSuppliers);
   };
+
+  // Calculate how many suppliers were matched
+  const matchedCount = suppliers.filter(supplier => supplier.company !== null && supplier.company !== undefined).length;
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 animate-fade-in">
@@ -51,8 +64,17 @@ const Index = () => {
                 <h3 className="text-xl font-medium mb-2">
                   Loaded {suppliers.length} suppliers
                 </h3>
-                <p className="text-muted-foreground text-sm">
-                  Your suppliers have been successfully loaded and are ready for processing.
+                
+                <Alert className="mt-4 bg-blue-50 border-blue-200">
+                  <AlertTitle>OpenCorporates API Results</AlertTitle>
+                  <AlertDescription>
+                    Successfully matched {matchedCount} out of {suppliers.length} suppliers 
+                    ({Math.round((matchedCount / suppliers.length) * 100)}%) with company data.
+                  </AlertDescription>
+                </Alert>
+                
+                <p className="text-muted-foreground text-sm mt-4">
+                  Your suppliers have been successfully loaded and matched with OpenCorporates data.
                 </p>
               </div>
             </div>
