@@ -18,6 +18,12 @@ interface Company {
   jurisdiction: string;
   status: string;
   parentLei?: string;
+  legalForm?: string;
+  registrationAuthority?: string;
+  nextRenewalDate?: string;
+  initialRegistrationDate?: string;
+  lastUpdateDate?: string;
+  entityCategory?: string;
 }
 
 interface Supplier {
