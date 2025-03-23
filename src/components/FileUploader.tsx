@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 
@@ -23,9 +22,11 @@ interface Company {
   lei: string;
   address: string;
   jurisdiction: string;
-  status: string;
+  entityStatus: string;
+  registrationStatus: string;
   parentLei?: string;
   legalForm?: string;
+  legalFormId?: string;
   registrationAuthority?: string;
   nextRenewalDate?: string;
   initialRegistrationDate?: string;
@@ -35,6 +36,8 @@ interface Company {
   hasUltimateParent: boolean;
   hasChildren: boolean;
   relationships?: CompanyRelationships;
+  bic?: string[];
+  headquartersAddress?: string | null;
 }
 
 interface Supplier {
@@ -186,15 +189,20 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           
           const formattedAddress = addressParts.join(', ');
           
-          // Extract relationship links with improved handling
+          const headquartersAddress = entity.headquartersAddress ? [
+            entity.headquartersAddress.addressLines?.join(', '),
+            entity.headquartersAddress.city,
+            entity.headquartersAddress.region,
+            entity.headquartersAddress.postalCode,
+            entity.headquartersAddress.country
+          ].filter(Boolean).join(', ') : null;
+          
           const relationships: CompanyRelationships = {};
           
-          // Check for direct parent relationship
           let hasDirectParent = false;
           if (record.relationships?.["direct-parent"]) {
             const directParentLinks = record.relationships["direct-parent"].links || {};
             
-            // Check for both relationship record and exception
             if (directParentLinks["relationship-record"]) {
               relationships.directParent = {
                 related: directParentLinks["relationship-record"]
@@ -214,12 +222,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             }
           }
           
-          // Check for ultimate parent relationship
           let hasUltimateParent = false;
           if (record.relationships?.["ultimate-parent"]) {
             const ultimateParentLinks = record.relationships["ultimate-parent"].links || {};
             
-            // Check for both relationship record and exception
             if (ultimateParentLinks["relationship-record"]) {
               relationships.ultimateParent = {
                 related: ultimateParentLinks["relationship-record"]
@@ -239,7 +245,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             }
           }
           
-          // Check for direct children
           let hasChildren = false;
           if (record.relationships?.["direct-children"]) {
             const directChildrenLinks = record.relationships["direct-children"].links || {};
@@ -252,12 +257,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             }
           }
           
-          // Create full legal form string if available
           const legalFormString = entity.legalForm && entity.legalForm.id
             ? `${entity.legalForm.id}${entity.legalForm.other ? ` - ${entity.legalForm.other}` : ''}`
             : undefined;
           
-          // Create full entity category string if available
           const entityCategoryString = entity.category
             ? entity.category
             : undefined;
@@ -267,9 +270,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             lei: record.id,
             address: formattedAddress,
             jurisdiction: entity.jurisdiction,
-            status: attributes.registration.status,
+            entityStatus: entity.status,
+            registrationStatus: attributes.registration.status,
             parentLei: entity.associatedEntity?.lei || undefined,
             legalForm: legalFormString,
+            legalFormId: entity.legalForm?.id,
             registrationAuthority: attributes.registration.managingLou,
             nextRenewalDate: attributes.registration.nextRenewalDate,
             initialRegistrationDate: attributes.registration.initialRegistrationDate,
@@ -278,14 +283,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             hasDirectParent: hasDirectParent,
             hasUltimateParent: hasUltimateParent,
             hasChildren: hasChildren,
-            relationships: relationships
+            relationships: relationships,
+            bic: attributes.bic || [],
+            headquartersAddress: headquartersAddress
           };
           
           matchedCount++;
           
-          // If we found relationships, try to get more details for the first few entities
           if ((hasDirectParent || hasUltimateParent) && i < 10) {
-            // Fetch exception details for direct parent if it exists
             if (hasDirectParent && relationships.directParent?.reportingException) {
               try {
                 const exceptionResponse = await fetch(relationships.directParent.reportingException);
@@ -299,7 +304,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
               }
             }
             
-            // Fetch exception details for ultimate parent if it exists
             if (hasUltimateParent && relationships.ultimateParent?.reportingException) {
               try {
                 const exceptionResponse = await fetch(relationships.ultimateParent.reportingException);
