@@ -18,7 +18,9 @@ import {
   Search, 
   Filter,
   X,
-  Building2
+  Network,
+  GitBranch,
+  Share2
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -27,22 +29,29 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { getStatusDescription } from "@/utils/companyUtils";
 
 interface Company {
   name: string;
   lei: string;
   address: string;
   jurisdiction: string;
-  status: string;
+  entityStatus: string;
+  registrationStatus: string;
   parentLei?: string;
   legalForm?: string;
+  legalFormId?: string;
   registrationAuthority?: string;
   nextRenewalDate?: string;
   initialRegistrationDate?: string;
   lastUpdateDate?: string;
   entityCategory?: string;
-  hasParent?: boolean;
+  hasDirectParent?: boolean;
+  hasUltimateParent?: boolean;
   hasChildren?: boolean;
+  relationships?: Record<string, any>;
+  bic?: string[];
+  headquartersAddress?: string;
 }
 
 interface Supplier {
@@ -54,18 +63,6 @@ interface SupplierTableProps {
   suppliers: Supplier[];
   onShowDetails: (supplier: Supplier) => void;
 }
-
-// Status code descriptions for tooltips
-const statusDescriptions: Record<string, string> = {
-  "ISSUED": "The LEI is active and valid",
-  "LAPSED": "The LEI registration has expired and needs renewal",
-  "PENDING_TRANSFER": "The LEI is in the process of being transferred to another managing authority",
-  "RETIRED": "The LEI is no longer in use (entity dissolved or merged)",
-  "DUPLICATE": "The LEI has been marked as a duplicate of another LEI",
-  "ANNULLED": "The LEI has been cancelled due to discovery that it should not have been issued",
-  "MERGED": "The legal entity represented by this LEI has merged with another entity",
-  "PENDING_VALIDATION": "The LEI has been requested but is awaiting validation"
-};
 
 const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails }) => {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -316,8 +313,8 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
             <TableHead className="w-[420px]">Company Information</TableHead>
             <TableHead className="w-[140px]">Match Result</TableHead>
             <TableHead className="w-[180px]">Address</TableHead>
-            <TableHead className="w-[100px]">Status</TableHead>
-            <TableHead className="w-[100px]">Relationships</TableHead>
+            <TableHead className="w-[120px]">Status</TableHead>
+            <TableHead className="w-[120px]">Relationships</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -431,22 +428,22 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                   </TooltipProvider>
                 </TableCell>
                 <TableCell className="py-2">
-                  {supplier.company?.status ? (
+                  {supplier.company?.registrationStatus ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center
-                            ${supplier.company.status === 'ISSUED' 
+                            ${supplier.company.registrationStatus === 'ISSUED' 
                               ? 'bg-green-100 text-green-800' 
-                              : supplier.company.status === 'LAPSED' 
+                              : supplier.company.registrationStatus === 'LAPSED' 
                                 ? 'bg-amber-100 text-amber-800'
                                 : 'bg-gray-100 text-gray-800'}`}
                           >
-                            {supplier.company.status}
+                            {supplier.company.registrationStatus}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{statusDescriptions[supplier.company.status] || 'Status description not available'}</p>
+                          <p>{getStatusDescription(supplier.company.registrationStatus)}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -457,16 +454,30 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                 <TableCell className="py-2">
                   {supplier.company ? (
                     <div className="flex gap-2">
-                      {supplier.company.hasParent && (
+                      {supplier.company.hasDirectParent && (
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="inline-flex items-center text-blue-500">
-                                <ChevronUp className="h-4 w-4" />
+                                <GitBranch className="h-4 w-4" />
                               </span>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>Has parent company</p>
+                              <p>Has direct parent</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {supplier.company.hasUltimateParent && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center text-indigo-500">
+                                <Share2 className="h-4 w-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Has ultimate parent</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -485,12 +496,14 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                           </Tooltip>
                         </TooltipProvider>
                       )}
-                      {!supplier.company.hasParent && !supplier.company.hasChildren && (
+                      {!supplier.company.hasDirectParent && 
+                       !supplier.company.hasUltimateParent && 
+                       !supplier.company.hasChildren && (
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="inline-flex items-center text-gray-400">
-                                <Building2 className="h-4 w-4" />
+                                <Network className="h-4 w-4" />
                               </span>
                             </TooltipTrigger>
                             <TooltipContent>

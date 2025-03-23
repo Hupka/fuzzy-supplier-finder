@@ -1,12 +1,10 @@
+
 import React, { useState } from "react";
 import FileUploader from "@/components/FileUploader";
 import SupplierTable from "@/components/SupplierTable";
-import CompanyHierarchy, { CompanyNode } from "@/components/CompanyHierarchy";
-import { 
-  fetchCompanyByLei, 
-  fetchParentCompany, 
-  fetchDirectChildren 
-} from "@/utils/companyUtils";
+import EntityTree from "@/components/EntityTree";
+import CompanyDetails from "@/components/CompanyDetails";
+import { fetchCompanyByLei } from "@/utils/companyUtils";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -23,10 +21,6 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Tabs,
@@ -35,43 +29,9 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 
-interface CompanyRelationships {
-  directParent?: {
-    reportingException?: string;
-    related?: string;
-  };
-  ultimateParent?: {
-    reportingException?: string;
-    related?: string;
-  };
-}
-
-interface Company {
-  name: string;
-  lei: string;
-  address: string;
-  jurisdiction: string;
-  status: string;
-  parentLei?: string;
-  legalForm?: string;
-  registrationAuthority?: string;
-  nextRenewalDate?: string;
-  initialRegistrationDate?: string;
-  lastUpdateDate?: string;
-  entityCategory?: string;
-  hasParent?: boolean;
-  relationships?: CompanyRelationships;
-}
-
 interface Supplier {
   [key: string]: string | any;
-  company?: Company | null;
-}
-
-interface HierarchyData {
-  currentCompany: CompanyNode;
-  parentCompany: CompanyNode | null;
-  childCompanies: CompanyNode[];
+  company?: any | null;
 }
 
 const Index = () => {
@@ -80,9 +40,8 @@ const Index = () => {
   const [showTable, setShowTable] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
-  const [hierarchyData, setHierarchyData] = useState<HierarchyData | null>(null);
-  const [isLoadingHierarchy, setIsLoadingHierarchy] = useState(false);
   const [activeTab, setActiveTab] = useState("details");
+  const [isLoadingEntity, setIsLoadingEntity] = useState(false);
 
   const handleFileLoaded = (parsedSuppliers: Supplier[]) => {
     setSuppliers(parsedSuppliers);
@@ -93,178 +52,37 @@ const Index = () => {
     console.log("Parsed suppliers with company matches:", parsedSuppliers);
   };
 
-  const fetchCompanyHierarchy = async (company: Company) => {
-    if (!company || !company.lei) return;
-    
-    setIsLoadingHierarchy(true);
-    
-    try {
-      const currentNode: CompanyNode = {
-        lei: company.lei,
-        name: company.name,
-        relationship: company.entityCategory || "Current Company",
-        jurisdiction: company.jurisdiction,
-        status: company.status,
-        entityCategory: company.entityCategory
-      };
-      
-      let parentNode: CompanyNode | null = null;
-      const childNodes: CompanyNode[] = [];
-      
-      if (company.parentLei) {
-        const parentData = await fetchParentCompany(company.parentLei);
-        
-        if (parentData) {
-          const parentAttributes = parentData.attributes;
-          const parentEntity = parentAttributes.entity;
-          
-          const entityCategoryString = parentEntity.category || undefined;
-          
-          parentNode = {
-            lei: company.parentLei,
-            name: parentEntity.legalName.name,
-            relationship: entityCategoryString || "Parent Company",
-            jurisdiction: parentEntity.jurisdiction,
-            status: parentAttributes.registration.status,
-            entityCategory: entityCategoryString
-          };
-        }
-      }
-      
-      const childrenData = await fetchDirectChildren(company.lei);
-      
-      if (childrenData.length > 0) {
-        childrenData.forEach((child: any) => {
-          const childAttributes = child.attributes;
-          const childEntity = childAttributes.entity;
-          
-          const entityCategoryString = childEntity.category || undefined;
-          
-          childNodes.push({
-            lei: child.id,
-            name: childEntity.legalName.name,
-            relationship: entityCategoryString || "Subsidiary",
-            jurisdiction: childEntity.jurisdiction,
-            status: childAttributes.registration.status,
-            entityCategory: entityCategoryString
-          });
-        });
-      }
-      
-      setHierarchyData({
-        currentCompany: currentNode,
-        parentCompany: parentNode,
-        childCompanies: childNodes
-      });
-      
-      setActiveTab("hierarchy");
-    } catch (error) {
-      console.error("Error fetching company hierarchy:", error);
-      toast.error("Error fetching company hierarchy");
-    } finally {
-      setIsLoadingHierarchy(false);
-    }
-  };
-
   const showCompanyDetails = async (supplier: Supplier) => {
     setSelectedSupplier(supplier);
     setDetailsDialogOpen(true);
-    
-    setHierarchyData(null);
     setActiveTab("details");
-    
-    if (supplier.company) {
-      await fetchCompanyHierarchy(supplier.company);
-    }
   };
 
   const navigateToCompany = async (lei: string) => {
-    setIsLoadingHierarchy(true);
+    if (selectedSupplier?.company?.lei === lei) {
+      return; // Already looking at this company
+    }
+    
+    setIsLoadingEntity(true);
     
     try {
-      const data = await fetchCompanyByLei(lei);
+      const companyData = await fetchCompanyByLei(lei);
       
-      if (data) {
-        const attributes = data.attributes;
-        const entity = attributes.entity;
-        const legalAddress = entity.legalAddress;
-        
-        const addressParts = [
-          legalAddress.addressLines?.join(', '),
-          legalAddress.city,
-          legalAddress.region,
-          legalAddress.postalCode,
-          legalAddress.country
-        ].filter(Boolean);
-        
-        const formattedAddress = addressParts.join(', ');
-        
-        const relationships: CompanyRelationships = {};
-        
-        if (data.relationships) {
-          if (data.relationships["direct-parent"]) {
-            relationships.directParent = {
-              reportingException: data.relationships["direct-parent"].links?.reporting 
-                ? undefined 
-                : data.relationships["direct-parent"].links?.["reporting-exception"],
-              related: data.relationships["direct-parent"].links?.related
-            };
-          }
-          
-          if (data.relationships["ultimate-parent"]) {
-            relationships.ultimateParent = {
-              reportingException: data.relationships["ultimate-parent"].links?.reporting 
-                ? undefined 
-                : data.relationships["ultimate-parent"].links?.["reporting-exception"],
-              related: data.relationships["ultimate-parent"].links?.related
-            };
-          }
-        }
-        
-        const hasDirectParent = !!entity.associatedEntity?.lei || 
-          (data.relationships && 
-           data.relationships["direct-parent"] && 
-           !data.relationships["direct-parent"].links?.reporting);
-        
-        const legalFormString = entity.legalForm && entity.legalForm.id
-          ? `${entity.legalForm.id}${entity.legalForm.other ? ` - ${entity.legalForm.other}` : ''}`
-          : undefined;
-        
-        const entityCategoryString = entity.category || undefined;
-        
-        const company: Company = {
-          name: entity.legalName.name,
-          lei: data.id,
-          address: formattedAddress,
-          jurisdiction: entity.jurisdiction,
-          status: attributes.registration.status,
-          parentLei: entity.associatedEntity?.lei || undefined,
-          legalForm: legalFormString,
-          registrationAuthority: attributes.registration.managingLou,
-          nextRenewalDate: attributes.registration.nextRenewalDate,
-          initialRegistrationDate: attributes.registration.initialRegistrationDate,
-          lastUpdateDate: attributes.registration.lastUpdateDate,
-          entityCategory: entityCategoryString,
-          hasParent: hasDirectParent,
-          relationships: relationships
-        };
-        
+      if (companyData) {
         const syntheticSupplier: Supplier = {
-          name: company.name,
-          company: company
+          name: companyData.name,
+          company: companyData
         };
         
         setSelectedSupplier(syntheticSupplier);
-        
-        await fetchCompanyHierarchy(company);
       } else {
         toast.error("Could not find company with the provided LEI");
       }
     } catch (error) {
       console.error("Error navigating to company:", error);
-      toast.error("Error navigating to company");
+      toast.error("Error loading company details");
     } finally {
-      setIsLoadingHierarchy(false);
+      setIsLoadingEntity(false);
     }
   };
 
@@ -361,111 +179,21 @@ const Index = () => {
                         </TabsList>
                         
                         <TabsContent value="details" className="mt-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Card>
-                              <CardHeader>
-                                <CardTitle className="text-base">Basic Information</CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-2 text-sm">
-                                <div>
-                                  <span className="font-medium">Legal Form:</span> {selectedSupplier.company.legalForm || "Not available"}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Entity Category:</span> {selectedSupplier.company.entityCategory || "Not available"}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Jurisdiction:</span> {selectedSupplier.company.jurisdiction}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Status:</span> {selectedSupplier.company.status}
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            <Card>
-                              <CardHeader>
-                                <CardTitle className="text-base">Address Information</CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-2 text-sm">
-                                <div>
-                                  <span className="font-medium">Complete Address:</span><br />
-                                  {selectedSupplier.company.address}
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            <Card>
-                              <CardHeader>
-                                <CardTitle className="text-base">Registration Details</CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-2 text-sm">
-                                <div>
-                                  <span className="font-medium">Registration Authority:</span> {selectedSupplier.company.registrationAuthority || "Not available"}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Initial Registration:</span> {selectedSupplier.company.initialRegistrationDate 
-                                    ? new Date(selectedSupplier.company.initialRegistrationDate).toLocaleDateString() 
-                                    : "Not available"}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Last Update:</span> {selectedSupplier.company.lastUpdateDate 
-                                    ? new Date(selectedSupplier.company.lastUpdateDate).toLocaleDateString() 
-                                    : "Not available"}
-                                </div>
-                                <div>
-                                  <span className="font-medium">Next Renewal:</span> {selectedSupplier.company.nextRenewalDate 
-                                    ? new Date(selectedSupplier.company.nextRenewalDate).toLocaleDateString() 
-                                    : "Not available"}
-                                </div>
-                              </CardContent>
-                            </Card>
-                            
-                            <Card>
-                              <CardHeader>
-                                <CardTitle className="text-base">Corporate Structure</CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-2 text-sm">
-                                <div>
-                                  <span className="font-medium">Parent LEI:</span> {selectedSupplier.company.parentLei || "No parent company information"}
-                                </div>
-                                {selectedSupplier.company.parentLei && (
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    className="mt-2"
-                                    onClick={() => {
-                                      setActiveTab("hierarchy");
-                                    }}
-                                  >
-                                    View Corporate Hierarchy
-                                  </Button>
-                                )}
-                              </CardContent>
-                            </Card>
-                          </div>
+                          <CompanyDetails company={selectedSupplier.company} />
                         </TabsContent>
                         
                         <TabsContent value="hierarchy" className="mt-4">
                           <Card>
-                            <CardHeader>
-                              <CardTitle className="text-base">Corporate Hierarchy</CardTitle>
-                              <CardDescription>
-                                Explore parent companies and subsidiaries
-                              </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                              {hierarchyData ? (
-                                <CompanyHierarchy
-                                  currentCompany={hierarchyData.currentCompany}
-                                  parentCompany={hierarchyData.parentCompany}
-                                  childCompanies={hierarchyData.childCompanies}
-                                  onSelectCompany={navigateToCompany}
-                                  isLoading={isLoadingHierarchy}
-                                />
-                              ) : (
+                            <CardContent className="pt-6">
+                              {isLoadingEntity ? (
                                 <div className="flex items-center justify-center h-48 w-full">
                                   <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
                                 </div>
+                              ) : (
+                                <EntityTree 
+                                  company={selectedSupplier.company}
+                                  onSelectEntity={navigateToCompany}
+                                />
                               )}
                             </CardContent>
                           </Card>
