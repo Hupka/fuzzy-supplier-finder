@@ -31,6 +31,22 @@ import {
 } from "@/components/ui/tooltip";
 import { getStatusDescription } from "@/utils/companyUtils";
 
+interface CompanyRelationships {
+  directParent?: {
+    reportingException?: string;
+    related?: string;
+    reason?: string;
+  };
+  ultimateParent?: {
+    reportingException?: string;
+    related?: string;
+    reason?: string;
+  };
+  directChildren?: {
+    related?: string;
+  };
+}
+
 interface Company {
   name: string;
   lei: string;
@@ -46,12 +62,12 @@ interface Company {
   initialRegistrationDate?: string;
   lastUpdateDate?: string;
   entityCategory?: string;
-  hasDirectParent?: boolean;
-  hasUltimateParent?: boolean;
-  hasChildren?: boolean;
-  relationships?: Record<string, any>;
+  hasDirectParent: boolean;
+  hasUltimateParent: boolean;
+  hasChildren: boolean;
+  relationships?: CompanyRelationships;
   bic?: string[];
-  headquartersAddress?: string;
+  headquartersAddress?: string | null;
 }
 
 interface Supplier {
@@ -184,7 +200,7 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
           entity.headquartersAddress.country
         ].filter(Boolean).join(', ') : null;
         
-        const relationships = {};
+        const relationships: CompanyRelationships = {};
         
         let hasDirectParent = false;
         if (record.relationships?.["direct-parent"]) {
