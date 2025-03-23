@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from "react";
-import { fetchCorporateHierarchy } from "@/utils/companyUtils";
-import { Network, Share2, GitBranch } from "lucide-react";
+import { fetchCorporateHierarchy, getReportingExceptionDescription } from "@/utils/companyUtils";
+import { Network, Share2, GitBranch, AlertCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
@@ -30,7 +30,9 @@ const EntityTree: React.FC<EntityTreeProps> = ({ company, onSelectEntity }) => {
       setError(null);
       
       try {
+        console.log("Loading hierarchy for company:", company?.name);
         const hierarchy = await fetchCorporateHierarchy(company);
+        console.log("Hierarchy loaded:", hierarchy);
         setHierarchyData(hierarchy);
       } catch (err) {
         console.error("Error loading entity hierarchy:", err);
@@ -71,11 +73,18 @@ const EntityTree: React.FC<EntityTreeProps> = ({ company, onSelectEntity }) => {
     );
   }
 
-  // If there's no parent or children, display a message
-  const hasNoRelationships = 
-    !hierarchyData.directParent && 
-    !hierarchyData.ultimateParent && 
-    (!hierarchyData.children || hierarchyData.children.length === 0);
+  // Check if there are any real relationships or only exceptions
+  const hasActualRelationships = 
+    hierarchyData.directParent || 
+    hierarchyData.ultimateParent || 
+    (hierarchyData.children && hierarchyData.children.length > 0);
+  
+  const hasExceptions =
+    hierarchyData.directParentException ||
+    hierarchyData.ultimateParentException;
+  
+  // If there are no actual relationships and no exceptions, display no relationships message
+  const hasNoRelationships = !hasActualRelationships && !hasExceptions;
 
   if (hasNoRelationships) {
     return (
@@ -132,6 +141,42 @@ const EntityTree: React.FC<EntityTreeProps> = ({ company, onSelectEntity }) => {
         </div>
       )}
 
+      {/* Ultimate Parent Exception if no actual ultimate parent */}
+      {!hierarchyData.ultimateParent && hierarchyData.ultimateParentException && (
+        <div className="ultimate-parent-exception mb-4">
+          <div className="flex items-center justify-center mb-1">
+            <div className="w-0.5 h-6 bg-gray-300"></div>
+          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="ultimate-parent-exception-node border-amber-400 bg-amber-50 mb-2">
+                  <CardContent className="p-3 flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-2 text-amber-500" />
+                    <div>
+                      <div className="font-medium text-sm">Ultimate Parent Exception</div>
+                      <div className="text-xs text-muted-foreground">
+                        {getReportingExceptionDescription(hierarchyData.ultimateParentException.reason)}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="p-2">
+                  <p className="font-medium">Ultimate Parent Exception</p>
+                  <p className="text-xs mt-1">Reason: {getReportingExceptionDescription(hierarchyData.ultimateParentException.reason)}</p>
+                  <p className="text-xs">Category: {hierarchyData.ultimateParentException.category}</p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <div className="flex items-center justify-center mb-1">
+            <div className="w-0.5 h-6 bg-gray-300"></div>
+          </div>
+        </div>
+      )}
+
       {/* Direct Parent if available (and different from ultimate parent) */}
       {hierarchyData.directParent && 
        (!hierarchyData.ultimateParent || 
@@ -162,6 +207,42 @@ const EntityTree: React.FC<EntityTreeProps> = ({ company, onSelectEntity }) => {
                   <p className="text-xs mt-1">LEI: {hierarchyData.directParent.lei}</p>
                   <p className="text-xs">Status: {hierarchyData.directParent.registrationStatus}</p>
                   <p className="text-xs">Jurisdiction: {hierarchyData.directParent.jurisdiction}</p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <div className="flex items-center justify-center mb-1">
+            <div className="w-0.5 h-6 bg-gray-300"></div>
+          </div>
+        </div>
+      )}
+
+      {/* Direct Parent Exception if no actual direct parent */}
+      {!hierarchyData.directParent && hierarchyData.directParentException && (
+        <div className="direct-parent-exception mb-4">
+          <div className="flex items-center justify-center mb-1">
+            <div className="w-0.5 h-6 bg-gray-300"></div>
+          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="direct-parent-exception-node border-amber-400 bg-amber-50 mb-2">
+                  <CardContent className="p-3 flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-2 text-amber-500" />
+                    <div>
+                      <div className="font-medium text-sm">Direct Parent Exception</div>
+                      <div className="text-xs text-muted-foreground">
+                        {getReportingExceptionDescription(hierarchyData.directParentException.reason)}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="p-2">
+                  <p className="font-medium">Direct Parent Exception</p>
+                  <p className="text-xs mt-1">Reason: {getReportingExceptionDescription(hierarchyData.directParentException.reason)}</p>
+                  <p className="text-xs">Category: {hierarchyData.directParentException.category}</p>
                 </div>
               </TooltipContent>
             </Tooltip>

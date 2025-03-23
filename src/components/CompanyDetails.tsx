@@ -7,7 +7,7 @@ import {
   CardDescription, 
   CardContent 
 } from "@/components/ui/card";
-import { getLegalFormDescription, getStatusDescription } from "@/utils/companyUtils";
+import { getLegalFormDescription, getStatusDescription, getReportingExceptionDescription } from "@/utils/companyUtils";
 import { Network, Building2, Calendar, Globe, FileText } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -153,14 +153,18 @@ const CompanyDetails: React.FC<CompanyDetailsProps> = ({ company }) => {
               <span className="text-muted-foreground">Direct Parent:</span>
               <span>
                 {company.hasDirectParent 
-                  ? "Available in Corporate Hierarchy" 
+                  ? (company.relationships?.directParent?.reportingException
+                     ? `Exception: ${getReportingExceptionDescription(company.relationships.directParent.reason || "NATURAL_PERSONS")}`
+                     : "Available in Corporate Hierarchy")
                   : "No direct parent"}
               </span>
               
               <span className="text-muted-foreground">Ultimate Parent:</span>
               <span>
                 {company.hasUltimateParent 
-                  ? "Available in Corporate Hierarchy" 
+                  ? (company.relationships?.ultimateParent?.reportingException
+                     ? `Exception: ${getReportingExceptionDescription(company.relationships.ultimateParent.reason || "NATURAL_PERSONS")}`
+                     : "Available in Corporate Hierarchy")
                   : "No ultimate parent"}
               </span>
               
