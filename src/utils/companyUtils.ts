@@ -68,7 +68,7 @@ export const parseCompanyFromGLEIF = (data: any): any => {
       relationships.directParent = {
         relationshipRecord: data.relationships["direct-parent"].links["relationship-record"],
         leiRecord: data.relationships["direct-parent"].links["lei-record"],
-        reportingException: data.relationships["direct-parent"].links["reporting-exception"]
+        reportingException: data.relationships["direct-parent"].links?.["reporting-exception"]
       };
     }
     
@@ -77,7 +77,7 @@ export const parseCompanyFromGLEIF = (data: any): any => {
       relationships.ultimateParent = {
         relationshipRecord: data.relationships["ultimate-parent"].links["relationship-record"],
         leiRecord: data.relationships["ultimate-parent"].links["lei-record"],
-        reportingException: data.relationships["ultimate-parent"].links["reporting-exception"]
+        reportingException: data.relationships["ultimate-parent"].links?.["reporting-exception"]
       };
     }
     
@@ -134,6 +134,62 @@ export const parseCompanyFromGLEIF = (data: any): any => {
 };
 
 /**
+ * Helper to follow a link and get the LEI record URL
+ */
+async function getActualLeiRecordUrl(linkUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(linkUrl);
+    const data = await response.json();
+    
+    // Check if this is a relationship/exception record that has a link to the actual LEI record
+    if (data.data?.relationships?.["lei-record"]?.links?.related) {
+      return data.data.relationships["lei-record"].links.related;
+    }
+    
+    // If it's already an LEI record or we can't find a link to one
+    return null;
+  } catch (error) {
+    console.error("Error following relationship link:", error);
+    return null;
+  }
+}
+
+/**
+ * Fetch company data using a URL, handling relationship links if necessary
+ */
+async function fetchCompanyFromUrl(url: string): Promise<any | null> {
+  try {
+    // First try to get the data directly
+    let response = await fetch(url);
+    let data = await response.json();
+    
+    // If this is not an LEI record but a relationship or exception record
+    if (data.data && data.data.type !== "lei-records") {
+      // Try to find the link to the actual LEI record
+      const leiRecordUrl = await getActualLeiRecordUrl(url);
+      
+      if (leiRecordUrl) {
+        // Follow the link to get the actual LEI record
+        response = await fetch(leiRecordUrl);
+        data = await response.json();
+      } else {
+        console.error("Could not find LEI record link in relationship data");
+        return null;
+      }
+    }
+    
+    // Now we should have an LEI record
+    if (data.data) {
+      return parseCompanyFromGLEIF(data.data);
+    }
+  } catch (error) {
+    console.error("Error fetching company data:", error);
+  }
+  
+  return null;
+}
+
+/**
  * Fetch direct children of a company using the provided URL or construct one
  */
 export const fetchDirectChildren = async (lei: string, directChildrenUrl?: string): Promise<any[]> => {
@@ -143,6 +199,7 @@ export const fetchDirectChildren = async (lei: string, directChildrenUrl?: strin
     const data = await response.json();
     
     if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+      // This already returns an array of LEI records, so we can process them directly
       return data.data.map(child => parseCompanyFromGLEIF(child));
     }
   } catch (error) {
@@ -159,12 +216,10 @@ export const fetchParentCompany = async (directParentUrl?: string, parentLei?: s
   if (!directParentUrl && !parentLei) return null;
   
   try {
-    const url = directParentUrl || `https://api.gleif.org/api/v1/lei-records/${parentLei}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data.data) {
-      return parseCompanyFromGLEIF(data.data);
+    if (directParentUrl) {
+      return await fetchCompanyFromUrl(directParentUrl);
+    } else if (parentLei) {
+      return await fetchCompanyByLei(parentLei);
     }
   } catch (error) {
     console.error("Error fetching parent company:", error);
@@ -180,12 +235,7 @@ export const fetchUltimateParentCompany = async (ultimateParentUrl?: string): Pr
   if (!ultimateParentUrl) return null;
   
   try {
-    const response = await fetch(ultimateParentUrl);
-    const data = await response.json();
-    
-    if (data.data) {
-      return parseCompanyFromGLEIF(data.data);
-    }
+    return await fetchCompanyFromUrl(ultimateParentUrl);
   } catch (error) {
     console.error("Error fetching ultimate parent company:", error);
   }
@@ -198,12 +248,7 @@ export const fetchUltimateParentCompany = async (ultimateParentUrl?: string): Pr
  */
 export const fetchCompanyByLei = async (lei: string): Promise<any | null> => {
   try {
-    const response = await fetch(`https://api.gleif.org/api/v1/lei-records/${lei}`);
-    const data = await response.json();
-    
-    if (data.data) {
-      return parseCompanyFromGLEIF(data.data);
-    }
+    return await fetchCompanyFromUrl(`https://api.gleif.org/api/v1/lei-records/${lei}`);
   } catch (error) {
     console.error("Error fetching company by LEI:", error);
   }
@@ -230,14 +275,14 @@ export const fetchCorporateHierarchy = async (company: any) => {
   try {
     // Fetch direct parent if available
     if (company.hasDirectParent && company.relationships?.directParent?.leiRecord) {
-      hierarchyData.directParent = await fetchParentCompany(
+      hierarchyData.directParent = await fetchCompanyFromUrl(
         company.relationships.directParent.leiRecord
       );
     }
     
     // Fetch ultimate parent if available
     if (company.hasUltimateParent && company.relationships?.ultimateParent?.leiRecord) {
-      hierarchyData.ultimateParent = await fetchUltimateParentCompany(
+      hierarchyData.ultimateParent = await fetchCompanyFromUrl(
         company.relationships.ultimateParent.leiRecord
       );
     }
@@ -259,4 +304,3 @@ export const fetchCorporateHierarchy = async (company: any) => {
   
   return hierarchyData;
 };
-
