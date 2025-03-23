@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 
@@ -106,7 +105,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           return;
         }
 
-        // Match suppliers with GLEIF API instead of OpenCorporates
+        // Match suppliers with GLEIF API
         await matchSuppliersWithGLEIF(suppliers);
         
         onFileLoaded(suppliers);
@@ -128,12 +127,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
     let suppliersToProcess = [...suppliers];
     const isDevelopment = process.env.NODE_ENV === 'development' || true; // Force dev mode for now
     
-    if (isDevelopment && suppliersToProcess.length > 30) {
-      // Randomly select 20-30 suppliers
-      const sampleSize = Math.floor(Math.random() * 11) + 20; // Random number between 20-30
+    if (isDevelopment && suppliersToProcess.length > 60) {
+      // Updated to 60 random suppliers
+      const sampleSize = 60;
       suppliersToProcess = suppliersToProcess
         .sort(() => 0.5 - Math.random()) // Shuffle array
-        .slice(0, sampleSize); // Take first N elements
+        .slice(0, sampleSize); // Take first 60 elements
       
       console.log(`Development mode: Processing ${sampleSize} random suppliers out of ${suppliers.length}`);
     }
@@ -168,14 +167,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           
           const formattedAddress = addressParts.join(', ');
           
-          // Add the company data to the supplier object
+          // Add the company data to the supplier object with additional fields
           supplier.company = {
             name: entity.legalName.name,
             lei: record.id,
             address: formattedAddress,
             jurisdiction: entity.legalJurisdiction,
             status: attributes.registration.status,
-            parentLei: entity.headquarters?.lei || undefined
+            parentLei: entity.headquarters?.lei || undefined,
+            // Additional interesting data points from the API
+            legalForm: entity.legalForm?.name,
+            registrationAuthority: attributes.registration.managingLou,
+            nextRenewalDate: attributes.registration.nextRenewalDate,
+            initialRegistrationDate: attributes.registration.initialRegistrationDate,
+            lastUpdateDate: attributes.registration.lastUpdateDate,
+            entityCategory: entity.category?.name
           };
           
           matchedCount++;
@@ -185,7 +191,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
         }
         
         // Add a small delay to avoid hitting rate limits
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 250));
         
       } catch (error) {
         console.error(`Error matching supplier ${supplier.name}:`, error);
@@ -193,14 +199,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
       }
     }
     
-    // Update all suppliers with their GLEIF data (not just the sampled ones)
+    // For unprocessed suppliers, mark them as not attempted (undefined)
     if (isDevelopment && suppliers.length > suppliersToProcess.length) {
       const processedSupplierNames = suppliersToProcess.map(s => s.name);
       
-      // Mark unprocessed suppliers as not matched
+      // Mark unprocessed suppliers as not attempted
       suppliers.forEach(supplier => {
         if (!processedSupplierNames.includes(supplier.name)) {
-          supplier.company = null;
+          // undefined means "not attempted" while null means "attempted but no match"
+          supplier.company = undefined;
         }
       });
     }
