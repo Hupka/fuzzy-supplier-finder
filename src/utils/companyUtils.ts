@@ -286,6 +286,19 @@ export const fetchParentCompany = async (company: any): Promise<{
   try {
     const relationships = company.relationships.directParent;
     
+    // If company has direct parent exception flag, prioritize exception handling
+    if (company.directParentException && relationships.reportingException) {
+      console.log("Processing parent reporting exception:", relationships.reportingException);
+      const exceptionResult = await followRelationshipLink(relationships.reportingException);
+      
+      if (exceptionResult && exceptionResult.type === "exception") {
+        return { 
+          parentEntity: null, 
+          parentException: exceptionResult.data 
+        };
+      }
+    }
+    
     // Check for direct LEI record link - use this first if available
     if (relationships.leiRecord) {
       console.log("Fetching parent directly using lei-record link:", relationships.leiRecord);
@@ -347,6 +360,19 @@ export const fetchUltimateParentCompany = async (company: any): Promise<{
   
   try {
     const relationships = company.relationships.ultimateParent;
+    
+    // If company has ultimate parent exception flag, prioritize exception handling
+    if (company.ultimateParentException && relationships.reportingException) {
+      console.log("Processing ultimate parent reporting exception:", relationships.reportingException);
+      const exceptionResult = await followRelationshipLink(relationships.reportingException);
+      
+      if (exceptionResult && exceptionResult.type === "exception") {
+        return { 
+          parentEntity: null, 
+          parentException: exceptionResult.data 
+        };
+      }
+    }
     
     // Check for direct LEI record link - use this first if available
     if (relationships.leiRecord) {
@@ -418,7 +444,7 @@ export const fetchCorporateHierarchy = async (company: any) => {
     console.log("Fetching hierarchy for company:", company.name, company.lei);
     
     // Fetch direct parent if available
-    if (company.hasDirectParent) {
+    if (company.hasDirectParent || company.directParentException) {
       console.log("Fetching direct parent...");
       const parentResult = await fetchParentCompany(company);
       hierarchyData.directParent = parentResult?.parentEntity || null;
@@ -434,7 +460,7 @@ export const fetchCorporateHierarchy = async (company: any) => {
     }
     
     // Fetch ultimate parent if available
-    if (company.hasUltimateParent) {
+    if (company.hasUltimateParent || company.ultimateParentException) {
       console.log("Fetching ultimate parent...");
       const ultimateResult = await fetchUltimateParentCompany(company);
       hierarchyData.ultimateParent = ultimateResult?.parentEntity || null;

@@ -1,4 +1,3 @@
-
 import React from "react";
 import { 
   Card, 
@@ -174,19 +173,19 @@ const CompanyDetails: React.FC<CompanyDetailsProps> = ({ company }) => {
               <span className="text-muted-foreground">Direct Parent:</span>
               <span>
                 {company.hasDirectParent 
-                  ? (company.relationships?.directParent?.reportingException
+                  ? "Available in Corporate Hierarchy"
+                  : company.directParentException
                      ? renderExceptionInfo(company.relationships?.directParent?.reason || "NATURAL_PERSONS")
-                     : "Available in Corporate Hierarchy")
-                  : "No direct parent"}
+                     : "No direct parent"}
               </span>
               
               <span className="text-muted-foreground">Ultimate Parent:</span>
               <span>
                 {company.hasUltimateParent 
-                  ? (company.relationships?.ultimateParent?.reportingException
+                  ? "Available in Corporate Hierarchy"
+                  : company.ultimateParentException
                      ? renderExceptionInfo(company.relationships?.ultimateParent?.reason || "NATURAL_PERSONS")
-                     : "Available in Corporate Hierarchy")
-                  : "No ultimate parent"}
+                     : "No ultimate parent"}
               </span>
               
               <span className="text-muted-foreground">Subsidiaries:</span>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from "react";
-import { fetchCorporateHierarchy, getReportingExceptionDescription } from "@/utils/companyUtils";
+import { fetchCorporateHierarchy } from "@/utils/companyUtils";
 import { Network, Share2, GitBranch, AlertCircle, ZoomIn, ZoomOut } from "lucide-react";
 import ReactFlow, {
   Background,
@@ -38,8 +38,7 @@ const nodeStyles = {
   current: { border: "1px solid rgb(74, 222, 128)", background: "rgb(240, 253, 244)" },
   ultimateParent: { border: "1px solid rgb(96, 165, 250)", background: "rgb(239, 246, 255)" },
   directParent: { border: "1px solid rgb(129, 140, 248)", background: "rgb(238, 242, 255)" },
-  child: { border: "1px solid rgb(251, 191, 36)", background: "rgb(255, 251, 235)" },
-  exception: { border: "1px solid rgb(251, 191, 36)", background: "rgb(255, 251, 235)" }
+  child: { border: "1px solid rgb(251, 191, 36)", background: "rgb(255, 251, 235)" }
 };
 
 // Default node dimensions
@@ -120,51 +119,20 @@ const EntityTree: React.FC<EntityTreeProps> = ({ company, onSelectEntity }) => {
       });
       return id;
     };
-
-    // Create exception node
-    const createExceptionNode = (exception: any, type: string, x: number, y: number): string => {
-      const id = `node-${nodeId++}`;
-      newNodes.push({
-        id,
-        type: 'default',
-        position: { x, y },
-        data: { 
-          label: (
-            <div className="p-1 text-center">
-              <div className="font-medium text-sm">{`${type} Exception`}</div>
-              <div className="text-xs text-muted-foreground truncate">
-                {getReportingExceptionDescription(exception.reason)}
-              </div>
-            </div>
-          )
-        },
-        style: { 
-          ...nodeStyles.exception,
-          width: nodeWidth,
-          height: nodeHeight
-        },
-        sourcePosition: Position.Bottom,
-        targetPosition: Position.Top,
-      });
-      return id;
-    };
     
     // Center position for layout
     const centerX = 200;
     let currentY = 300;
     const ySpacing = 150;
     
-    // Add ultimate parent if available
+    // Add ultimate parent if available (only if it's an actual entity, not an exception)
     let ultimateParentId = null;
     if (hierarchyData.ultimateParent) {
       ultimateParentId = createNode(hierarchyData.ultimateParent, 'ultimateParent', centerX, currentY);
       currentY += ySpacing;
-    } else if (hierarchyData.ultimateParentException) {
-      ultimateParentId = createExceptionNode(hierarchyData.ultimateParentException, 'Ultimate Parent', centerX, currentY);
-      currentY += ySpacing;
     }
     
-    // Add direct parent if available and different from ultimate parent
+    // Add direct parent if available and different from ultimate parent (only if it's an actual entity, not an exception)
     let directParentId = null;
     const directParentExists = hierarchyData.directParent && 
       (!hierarchyData.ultimateParent || 
@@ -175,19 +143,6 @@ const EntityTree: React.FC<EntityTreeProps> = ({ company, onSelectEntity }) => {
       currentY += ySpacing;
       
       // Connect ultimate parent to direct parent if both exist
-      if (ultimateParentId && directParentId) {
-        newEdges.push({
-          id: `edge-${ultimateParentId}-${directParentId}`,
-          source: ultimateParentId,
-          target: directParentId,
-          animated: true,
-        });
-      }
-    } else if (!directParentExists && hierarchyData.directParentException) {
-      directParentId = createExceptionNode(hierarchyData.directParentException, 'Direct Parent', centerX, currentY);
-      currentY += ySpacing;
-      
-      // Connect ultimate parent to direct parent exception if ultimate parent exists
       if (ultimateParentId && directParentId) {
         newEdges.push({
           id: `edge-${ultimateParentId}-${directParentId}`,
@@ -258,20 +213,14 @@ const EntityTree: React.FC<EntityTreeProps> = ({ company, onSelectEntity }) => {
     );
   }
 
-  // Check if there are any real relationships or only exceptions
+  // Check if there are any real relationships
   const hasActualRelationships = 
     hierarchyData?.directParent || 
     hierarchyData?.ultimateParent || 
     (hierarchyData?.children && hierarchyData?.children.length > 0);
   
-  const hasExceptions =
-    hierarchyData?.directParentException ||
-    hierarchyData?.ultimateParentException;
-  
-  // If there are no actual relationships and no exceptions, display no relationships message
-  const hasNoHierarchyData = !hierarchyData || (!hasActualRelationships && !hasExceptions);
-
-  if (hasNoHierarchyData) {
+  // If there are no actual relationships, display no relationships message
+  if (!hierarchyData || !hasActualRelationships) {
     return (
       <div className="p-4 border rounded-md flex items-center justify-center">
         <Network className="h-5 w-5 text-muted-foreground mr-2" />

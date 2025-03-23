@@ -204,6 +204,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           const relationships: CompanyRelationships = {};
           
           let hasDirectParent = false;
+          let directParentException = false;
+
           if (record.relationships?.["direct-parent"]) {
             const directParentLinks = record.relationships["direct-parent"].links || {};
             
@@ -216,21 +218,24 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             
             if (directParentLinks["relationship-record"]) {
               relationships.directParent.relationshipRecord = directParentLinks["relationship-record"];
-              hasDirectParent = true;
+              hasDirectParent = directParentLinks["lei-record"] ? hasDirectParent : false;
             }
             
             if (directParentLinks["reporting-exception"]) {
               relationships.directParent.reportingException = directParentLinks["reporting-exception"];
-              hasDirectParent = true;
+              directParentException = true;
+              hasDirectParent = false;
             }
             
             if (directParentLinks["related"]) {
               relationships.directParent.related = directParentLinks["related"];
-              hasDirectParent = true;
+              hasDirectParent = directParentLinks["lei-record"] ? hasDirectParent : false;
             }
           }
           
           let hasUltimateParent = false;
+          let ultimateParentException = false;
+
           if (record.relationships?.["ultimate-parent"]) {
             const ultimateParentLinks = record.relationships["ultimate-parent"].links || {};
             
@@ -243,17 +248,18 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             
             if (ultimateParentLinks["relationship-record"]) {
               relationships.ultimateParent.relationshipRecord = ultimateParentLinks["relationship-record"];
-              hasUltimateParent = true;
+              hasUltimateParent = ultimateParentLinks["lei-record"] ? hasUltimateParent : false;
             }
             
             if (ultimateParentLinks["reporting-exception"]) {
               relationships.ultimateParent.reportingException = ultimateParentLinks["reporting-exception"];
-              hasUltimateParent = true;
+              ultimateParentException = true;
+              hasUltimateParent = false;
             }
             
             if (ultimateParentLinks["related"]) {
               relationships.ultimateParent.related = ultimateParentLinks["related"];
-              hasUltimateParent = true;
+              hasUltimateParent = ultimateParentLinks["lei-record"] ? hasUltimateParent : false;
             }
           }
           
@@ -261,11 +267,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           if (record.relationships?.["direct-children"]) {
             const directChildrenLinks = record.relationships["direct-children"].links || {};
             
+            relationships.directChildren = {};
+            
             if (directChildrenLinks["related"]) {
-              relationships.directChildren = {
-                related: directChildrenLinks["related"]
-              };
+              relationships.directChildren.related = directChildrenLinks["related"];
               hasChildren = true;
+            }
+            
+            if (directChildrenLinks["relationship-records"]) {
+              relationships.directChildren.relationshipRecords = directChildrenLinks["relationship-records"];
             }
           }
           
@@ -292,9 +302,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             initialRegistrationDate: attributes.registration.initialRegistrationDate,
             lastUpdateDate: attributes.registration.lastUpdateDate,
             entityCategory: entityCategoryString,
-            hasDirectParent: hasDirectParent,
-            hasUltimateParent: hasUltimateParent,
-            hasChildren: hasChildren,
+            hasDirectParent,
+            hasUltimateParent,
+            hasChildren,
+            directParentException,
+            ultimateParentException,
             relationships: relationships,
             bic: attributes.bic || [],
             headquartersAddress: headquartersAddress
@@ -302,8 +314,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           
           matchedCount++;
           
-          if ((hasDirectParent || hasUltimateParent) && i < 10) {
-            if (hasDirectParent && relationships.directParent?.reportingException) {
+          if ((hasDirectParent || hasUltimateParent || directParentException || ultimateParentException) && i < 10) {
+            if (directParentException && relationships.directParent?.reportingException) {
               try {
                 const exceptionResponse = await fetch(relationships.directParent.reportingException);
                 const exceptionData = await exceptionResponse.json();
@@ -316,7 +328,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
               }
             }
             
-            if (hasUltimateParent && relationships.ultimateParent?.reportingException) {
+            if (ultimateParentException && relationships.ultimateParent?.reportingException) {
               try {
                 const exceptionResponse = await fetch(relationships.ultimateParent.reportingException);
                 const exceptionData = await exceptionResponse.json();

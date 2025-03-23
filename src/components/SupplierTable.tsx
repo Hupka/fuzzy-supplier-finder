@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -20,7 +19,8 @@ import {
   X,
   Network,
   GitBranch,
-  Share2
+  Share2,
+  AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -36,14 +36,19 @@ interface CompanyRelationships {
     reportingException?: string;
     related?: string;
     reason?: string;
+    leiRecord?: string;
+    relationshipRecord?: string;
   };
   ultimateParent?: {
     reportingException?: string;
     related?: string;
     reason?: string;
+    leiRecord?: string;
+    relationshipRecord?: string;
   };
   directChildren?: {
     related?: string;
+    relationshipRecords?: string;
   };
 }
 
@@ -65,6 +70,8 @@ interface Company {
   hasDirectParent: boolean;
   hasUltimateParent: boolean;
   hasChildren: boolean;
+  directParentException?: boolean;
+  ultimateParentException?: boolean;
   relationships?: CompanyRelationships;
   bic?: string[];
   headquartersAddress?: string | null;
@@ -88,7 +95,6 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
   const [filterStatus, setFilterStatus] = useState("all"); // "all", "matched", "not-matched", "not-attempted"
   const [pendingMatches, setPendingMatches] = useState<Set<string>>(new Set());
 
-  // Count suppliers with match attempts
   const attemptedCount = suppliers.filter(
     (supplier) => supplier.company !== undefined
   ).length;
@@ -98,10 +104,8 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
   const successRate = attemptedCount > 0 ? Math.round((matchedCount / attemptedCount) * 100) : 0;
 
   useEffect(() => {
-    // Apply filters whenever the suppliers, searchTerm, or filterStatus changes
     let result = [...suppliers];
     
-    // Apply search filter
     if (searchTerm) {
       result = result.filter(
         (supplier) => 
@@ -111,7 +115,6 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
       );
     }
     
-    // Apply status filter
     if (filterStatus !== "all") {
       switch (filterStatus) {
         case "matched":
@@ -156,19 +159,15 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
   };
 
   const refetchSupplier = async (supplier: Supplier, index: number) => {
-    // Check if we're already fetching this supplier to prevent duplicate requests
     if (pendingMatches.has(supplier.name)) {
-      return; // Already in progress, don't start another request
+      return;
     }
 
     try {
-      // Add supplier to pending matches
       setPendingMatches(prev => new Set(prev).add(supplier.name));
       
-      // Display a single loading toast with an ID we can reference later
       const toastId = toast.loading(`Attempting to match ${supplier.name}...`);
       
-      // Encode the supplier name for the URL
       const encodedName = encodeURIComponent(supplier.name);
       const url = `https://api.gleif.org/api/v1/lei-records?filter[entity.legalName]=${encodedName}&page[size]=1`;
       
@@ -181,7 +180,6 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         const entity = attributes.entity;
         const legalAddress = entity.legalAddress;
         
-        // Format address from components
         const addressParts = [
           legalAddress.addressLines?.join(', '),
           legalAddress.city,
@@ -203,48 +201,62 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         const relationships: CompanyRelationships = {};
         
         let hasDirectParent = false;
+        let directParentException = false;
+
         if (record.relationships?.["direct-parent"]) {
           const directParentLinks = record.relationships["direct-parent"].links || {};
           
+          relationships.directParent = {};
+          
+          if (directParentLinks["lei-record"]) {
+            relationships.directParent.leiRecord = directParentLinks["lei-record"];
+            hasDirectParent = true;
+          }
+          
           if (directParentLinks["relationship-record"]) {
-            relationships.directParent = {
-              related: directParentLinks["relationship-record"]
-            };
-            hasDirectParent = true;
-          } else if (directParentLinks["reporting-exception"]) {
-            relationships.directParent = {
-              reportingException: directParentLinks["reporting-exception"],
-              reason: "EXCEPTION" // Will be replaced with actual reason later
-            };
-            hasDirectParent = true;
-          } else if (directParentLinks["lei-record"]) {
-            relationships.directParent = {
-              related: directParentLinks["lei-record"]
-            };
-            hasDirectParent = true;
+            relationships.directParent.relationshipRecord = directParentLinks["relationship-record"];
+            hasDirectParent = directParentLinks["lei-record"] ? hasDirectParent : false;
+          }
+          
+          if (directParentLinks["reporting-exception"]) {
+            relationships.directParent.reportingException = directParentLinks["reporting-exception"];
+            directParentException = true;
+            hasDirectParent = false;
+          }
+          
+          if (directParentLinks["related"]) {
+            relationships.directParent.related = directParentLinks["related"];
+            hasDirectParent = directParentLinks["lei-record"] ? hasDirectParent : false;
           }
         }
         
         let hasUltimateParent = false;
+        let ultimateParentException = false;
+
         if (record.relationships?.["ultimate-parent"]) {
           const ultimateParentLinks = record.relationships["ultimate-parent"].links || {};
           
+          relationships.ultimateParent = {};
+          
+          if (ultimateParentLinks["lei-record"]) {
+            relationships.ultimateParent.leiRecord = ultimateParentLinks["lei-record"];
+            hasUltimateParent = true;
+          }
+          
           if (ultimateParentLinks["relationship-record"]) {
-            relationships.ultimateParent = {
-              related: ultimateParentLinks["relationship-record"]
-            };
-            hasUltimateParent = true;
-          } else if (ultimateParentLinks["reporting-exception"]) {
-            relationships.ultimateParent = {
-              reportingException: ultimateParentLinks["reporting-exception"],
-              reason: "EXCEPTION" // Will be replaced with actual reason later
-            };
-            hasUltimateParent = true;
-          } else if (ultimateParentLinks["lei-record"]) {
-            relationships.ultimateParent = {
-              related: ultimateParentLinks["lei-record"]
-            };
-            hasUltimateParent = true;
+            relationships.ultimateParent.relationshipRecord = ultimateParentLinks["relationship-record"];
+            hasUltimateParent = ultimateParentLinks["lei-record"] ? hasUltimateParent : false;
+          }
+          
+          if (ultimateParentLinks["reporting-exception"]) {
+            relationships.ultimateParent.reportingException = ultimateParentLinks["reporting-exception"];
+            ultimateParentException = true;
+            hasUltimateParent = false;
+          }
+          
+          if (ultimateParentLinks["related"]) {
+            relationships.ultimateParent.related = ultimateParentLinks["related"];
+            hasUltimateParent = ultimateParentLinks["lei-record"] ? hasUltimateParent : false;
           }
         }
         
@@ -252,11 +264,15 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         if (record.relationships?.["direct-children"]) {
           const directChildrenLinks = record.relationships["direct-children"].links || {};
           
+          relationships.directChildren = {};
+          
           if (directChildrenLinks["related"]) {
-            relationships.directChildren = {
-              related: directChildrenLinks["related"]
-            };
+            relationships.directChildren.related = directChildrenLinks["related"];
             hasChildren = true;
+          }
+          
+          if (directChildrenLinks["relationship-records"]) {
+            relationships.directChildren.relationshipRecords = directChildrenLinks["relationship-records"];
           }
         }
         
@@ -283,15 +299,16 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
           initialRegistrationDate: attributes.registration.initialRegistrationDate,
           lastUpdateDate: attributes.registration.lastUpdateDate,
           entityCategory: entityCategoryString,
-          hasDirectParent: hasDirectParent,
-          hasUltimateParent: hasUltimateParent,
-          hasChildren: hasChildren,
+          hasDirectParent,
+          hasUltimateParent,
+          hasChildren,
+          directParentException,
+          ultimateParentException,
           relationships: relationships,
           bic: attributes.bic || [],
           headquartersAddress: headquartersAddress
         };
         
-        // Check for children
         try {
           const childrenUrl = `https://api.gleif.org/api/v1/lei-records?filter[entity.parent.lei]=${record.id}&page[size]=1`;
           const childrenResponse = await fetch(childrenUrl);
@@ -305,30 +322,24 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
           supplier.company.hasChildren = false;
         }
         
-        // Update the loading toast to success (replacing it)
         toast.success(`Successfully matched ${supplier.name}`, {
           id: toastId,
         });
       } else {
-        // Mark as unmatched
         supplier.company = null;
-        // Update the loading toast to error (replacing it)
         toast.error(`No match found for ${supplier.name}`, {
           id: toastId,
         });
       }
       
-      // Force a re-render by creating a new suppliers array
       setFilteredSuppliers([...filteredSuppliers]);
       
     } catch (error) {
       console.error(`Error matching supplier ${supplier.name}:`, error);
       supplier.company = null;
-      // Show error toast
       toast.error(`Error matching ${supplier.name}`);
       setFilteredSuppliers([...filteredSuppliers]);
     } finally {
-      // Remove supplier from pending matches when done
       setPendingMatches(prev => {
         const newSet = new Set(prev);
         newSet.delete(supplier.name);
@@ -538,7 +549,7 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                 <TableCell className="py-2">
                   {supplier.company ? (
                     <div className="flex gap-2">
-                      {supplier.company.hasDirectParent && (
+                      {supplier.company.hasDirectParent && !supplier.company.directParentException && (
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -552,7 +563,21 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                           </Tooltip>
                         </TooltipProvider>
                       )}
-                      {supplier.company.hasUltimateParent && (
+                      {supplier.company.directParentException && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center text-amber-500">
+                                <AlertCircle className="h-4 w-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Direct parent exception</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {supplier.company.hasUltimateParent && !supplier.company.ultimateParentException && (
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -562,6 +587,20 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                             </TooltipTrigger>
                             <TooltipContent>
                               <p>Has ultimate parent</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {supplier.company.ultimateParentException && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center text-amber-500">
+                                <AlertCircle className="h-4 w-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Ultimate parent exception</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -582,7 +621,9 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                       )}
                       {!supplier.company.hasDirectParent && 
                        !supplier.company.hasUltimateParent && 
-                       !supplier.company.hasChildren && (
+                       !supplier.company.hasChildren &&
+                       !supplier.company.directParentException &&
+                       !supplier.company.ultimateParentException && (
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
