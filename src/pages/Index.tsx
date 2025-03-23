@@ -2,6 +2,11 @@ import React, { useState } from "react";
 import FileUploader from "@/components/FileUploader";
 import SupplierTable from "@/components/SupplierTable";
 import CompanyHierarchy, { CompanyNode } from "@/components/CompanyHierarchy";
+import { 
+  fetchCompanyByLei, 
+  fetchParentCompany, 
+  fetchDirectChildren 
+} from "@/utils/companyUtils";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -30,6 +35,17 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 
+interface CompanyRelationships {
+  directParent?: {
+    reportingException?: string;
+    related?: string;
+  };
+  ultimateParent?: {
+    reportingException?: string;
+    related?: string;
+  };
+}
+
 interface Company {
   name: string;
   lei: string;
@@ -44,6 +60,7 @@ interface Company {
   lastUpdateDate?: string;
   entityCategory?: string;
   hasParent?: boolean;
+  relationships?: CompanyRelationships;
 }
 
 interface Supplier {
@@ -95,55 +112,43 @@ const Index = () => {
       const childNodes: CompanyNode[] = [];
       
       if (company.parentLei) {
-        try {
-          const parentResponse = await fetch(`https://api.gleif.org/api/v1/lei-records/${company.parentLei}`);
-          const parentData = await parentResponse.json();
+        const parentData = await fetchParentCompany(company.parentLei);
+        
+        if (parentData) {
+          const parentAttributes = parentData.attributes;
+          const parentEntity = parentAttributes.entity;
           
-          if (parentData.data) {
-            const parentAttributes = parentData.data.attributes;
-            const parentEntity = parentAttributes.entity;
-            
-            const entityCategoryString = parentEntity.category || undefined;
-            
-            parentNode = {
-              lei: company.parentLei,
-              name: parentEntity.legalName.name,
-              relationship: entityCategoryString || "Parent Company",
-              jurisdiction: parentEntity.jurisdiction,
-              status: parentAttributes.registration.status,
-              entityCategory: entityCategoryString
-            };
-          }
-        } catch (error) {
-          console.error("Error fetching parent company:", error);
-          toast.error("Error fetching parent company information");
+          const entityCategoryString = parentEntity.category || undefined;
+          
+          parentNode = {
+            lei: company.parentLei,
+            name: parentEntity.legalName.name,
+            relationship: entityCategoryString || "Parent Company",
+            jurisdiction: parentEntity.jurisdiction,
+            status: parentAttributes.registration.status,
+            entityCategory: entityCategoryString
+          };
         }
       }
       
-      try {
-        const childrenResponse = await fetch(`https://api.gleif.org/api/v1/lei-records?filter[entity.parent.lei]=${company.lei}&page[size]=10`);
-        const childrenData = await childrenResponse.json();
-        
-        if (childrenData.data && childrenData.data.length > 0) {
-          childrenData.data.forEach((child: any) => {
-            const childAttributes = child.attributes;
-            const childEntity = childAttributes.entity;
-            
-            const entityCategoryString = childEntity.category || undefined;
-            
-            childNodes.push({
-              lei: child.id,
-              name: childEntity.legalName.name,
-              relationship: entityCategoryString || "Subsidiary",
-              jurisdiction: childEntity.jurisdiction,
-              status: childAttributes.registration.status,
-              entityCategory: entityCategoryString
-            });
+      const childrenData = await fetchDirectChildren(company.lei);
+      
+      if (childrenData.length > 0) {
+        childrenData.forEach((child: any) => {
+          const childAttributes = child.attributes;
+          const childEntity = childAttributes.entity;
+          
+          const entityCategoryString = childEntity.category || undefined;
+          
+          childNodes.push({
+            lei: child.id,
+            name: childEntity.legalName.name,
+            relationship: entityCategoryString || "Subsidiary",
+            jurisdiction: childEntity.jurisdiction,
+            status: childAttributes.registration.status,
+            entityCategory: entityCategoryString
           });
-        }
-      } catch (error) {
-        console.error("Error fetching child companies:", error);
-        toast.error("Error fetching subsidiary information");
+        });
       }
       
       setHierarchyData({
@@ -177,11 +182,10 @@ const Index = () => {
     setIsLoadingHierarchy(true);
     
     try {
-      const response = await fetch(`https://api.gleif.org/api/v1/lei-records/${lei}`);
-      const data = await response.json();
+      const data = await fetchCompanyByLei(lei);
       
-      if (data.data) {
-        const attributes = data.data.attributes;
+      if (data) {
+        const attributes = data.attributes;
         const entity = attributes.entity;
         const legalAddress = entity.legalAddress;
         
@@ -195,10 +199,32 @@ const Index = () => {
         
         const formattedAddress = addressParts.join(', ');
         
+        const relationships: CompanyRelationships = {};
+        
+        if (data.relationships) {
+          if (data.relationships["direct-parent"]) {
+            relationships.directParent = {
+              reportingException: data.relationships["direct-parent"].links?.reporting 
+                ? undefined 
+                : data.relationships["direct-parent"].links?.["reporting-exception"],
+              related: data.relationships["direct-parent"].links?.related
+            };
+          }
+          
+          if (data.relationships["ultimate-parent"]) {
+            relationships.ultimateParent = {
+              reportingException: data.relationships["ultimate-parent"].links?.reporting 
+                ? undefined 
+                : data.relationships["ultimate-parent"].links?.["reporting-exception"],
+              related: data.relationships["ultimate-parent"].links?.related
+            };
+          }
+        }
+        
         const hasDirectParent = !!entity.associatedEntity?.lei || 
-          (data.data.relationships && 
-           data.data.relationships["direct-parent"] && 
-           !data.data.relationships["direct-parent"].links.reporting);
+          (data.relationships && 
+           data.relationships["direct-parent"] && 
+           !data.relationships["direct-parent"].links?.reporting);
         
         const legalFormString = entity.legalForm && entity.legalForm.id
           ? `${entity.legalForm.id}${entity.legalForm.other ? ` - ${entity.legalForm.other}` : ''}`
@@ -208,7 +234,7 @@ const Index = () => {
         
         const company: Company = {
           name: entity.legalName.name,
-          lei: data.data.id,
+          lei: data.id,
           address: formattedAddress,
           jurisdiction: entity.jurisdiction,
           status: attributes.registration.status,
@@ -219,7 +245,8 @@ const Index = () => {
           initialRegistrationDate: attributes.registration.initialRegistrationDate,
           lastUpdateDate: attributes.registration.lastUpdateDate,
           entityCategory: entityCategoryString,
-          hasParent: hasDirectParent
+          hasParent: hasDirectParent,
+          relationships: relationships
         };
         
         const syntheticSupplier: Supplier = {

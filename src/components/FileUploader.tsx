@@ -2,22 +2,37 @@
 import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 
+interface CompanyRelationships {
+  directParent?: {
+    reportingException?: string;
+    related?: string;
+  };
+  ultimateParent?: {
+    reportingException?: string;
+    related?: string;
+  };
+}
+
+interface Company {
+  name: string;
+  lei: string;
+  address: string;
+  jurisdiction: string;
+  status: string;
+  parentLei?: string;
+  legalForm?: string;
+  registrationAuthority?: string;
+  nextRenewalDate?: string;
+  initialRegistrationDate?: string;
+  lastUpdateDate?: string;
+  entityCategory?: string;
+  hasParent?: boolean;
+  relationships?: CompanyRelationships;
+}
+
 interface Supplier {
   [key: string]: string | any;
-  company?: {
-    name: string;
-    lei: string;
-    address: string;
-    jurisdiction: string;
-    status: string;
-    parentLei?: string;
-    legalForm?: string;
-    registrationAuthority?: string;
-    nextRenewalDate?: string;
-    initialRegistrationDate?: string;
-    lastUpdateDate?: string;
-    entityCategory?: string;
-  } | null;
+  company?: Company | null;
 }
 
 interface FileUploaderProps {
@@ -164,11 +179,34 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           
           const formattedAddress = addressParts.join(', ');
           
+          // Extract relationship links
+          const relationships: CompanyRelationships = {};
+          
+          if (record.relationships) {
+            if (record.relationships["direct-parent"]) {
+              relationships.directParent = {
+                reportingException: record.relationships["direct-parent"].links?.reporting 
+                  ? undefined 
+                  : record.relationships["direct-parent"].links?.["reporting-exception"],
+                related: record.relationships["direct-parent"].links?.related
+              };
+            }
+            
+            if (record.relationships["ultimate-parent"]) {
+              relationships.ultimateParent = {
+                reportingException: record.relationships["ultimate-parent"].links?.reporting 
+                  ? undefined 
+                  : record.relationships["ultimate-parent"].links?.["reporting-exception"],
+                related: record.relationships["ultimate-parent"].links?.related
+              };
+            }
+          }
+          
           // Check for parent relationships
           const hasDirectParent = !!entity.associatedEntity?.lei || 
             (record.relationships && 
              record.relationships["direct-parent"] && 
-             !record.relationships["direct-parent"].links.reporting);
+             !record.relationships["direct-parent"].links?.reporting);
           
           // Create full legal form string if available
           const legalFormString = entity.legalForm && entity.legalForm.id
@@ -193,7 +231,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             initialRegistrationDate: attributes.registration.initialRegistrationDate,
             lastUpdateDate: attributes.registration.lastUpdateDate,
             entityCategory: entityCategoryString,
-            hasParent: hasDirectParent
+            hasParent: hasDirectParent,
+            relationships: relationships
           };
           
           matchedCount++;
