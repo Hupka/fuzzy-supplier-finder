@@ -64,12 +64,37 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
     window.Papa.parse(file, {
       header: true,
       complete: (results: { data: Supplier[], errors: any[], meta: any }) => {
-        const suppliers = results.data.filter(supplier => {
-          // Filter out empty rows and ensure the supplier has a name
-          return Object.keys(supplier).length > 0 && 
-                 (supplier.Name || supplier.name || supplier.SUPPLIER_NAME || 
-                  supplier.SupplierName || supplier["Supplier Name"] || supplier.COMPANY);
-        });
+        console.log("Raw CSV data:", results.data); // Add debug logging
+        
+        // Filter out empty rows and map to a standardized format
+        const suppliers = results.data
+          .filter(supplier => {
+            // Filter out empty rows
+            return Object.keys(supplier).length > 0 && 
+                  Object.values(supplier).some(value => value.trim() !== "");
+          })
+          .map(supplier => {
+            // Create a normalized supplier object
+            // Check for various possible field names based on the German CSV format
+            const normalizedSupplier: Supplier = {
+              id: supplier["ID (Lieferanten Nr)"] || supplier["ID"] || "",
+              name: supplier["Lieferant (Name)"] || supplier["Name"] || "",
+              organisation: supplier["Organisation"] || "",
+              relationship: supplier["Beziehung"] || "",
+              status: supplier["Lieferanten-Status"] || supplier["Status"] || ""
+            };
+            
+            // Add all original fields as well
+            return { ...supplier, ...normalizedSupplier };
+          });
+        
+        console.log("Processed suppliers:", suppliers); // Add debug logging
+        
+        if (suppliers.length === 0) {
+          toast.error("No valid supplier data found in CSV");
+          setLoading(false);
+          return;
+        }
         
         onFileLoaded(suppliers);
         setLoading(false);
