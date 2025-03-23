@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -175,21 +176,82 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         
         const formattedAddress = addressParts.join(', ');
         
-        // Check for parent relationship
-        const hasDirectParent = !!entity.associatedEntity?.lei || 
-          (record.relationships && 
-           record.relationships["direct-parent"] && 
-           !record.relationships["direct-parent"].links.reporting);
+        const headquartersAddress = entity.headquartersAddress ? [
+          entity.headquartersAddress.addressLines?.join(', '),
+          entity.headquartersAddress.city,
+          entity.headquartersAddress.region,
+          entity.headquartersAddress.postalCode,
+          entity.headquartersAddress.country
+        ].filter(Boolean).join(', ') : null;
         
-        // Create legal form string if available
+        const relationships = {};
+        
+        let hasDirectParent = false;
+        if (record.relationships?.["direct-parent"]) {
+          const directParentLinks = record.relationships["direct-parent"].links || {};
+          
+          if (directParentLinks["relationship-record"]) {
+            relationships.directParent = {
+              related: directParentLinks["relationship-record"]
+            };
+            hasDirectParent = true;
+          } else if (directParentLinks["reporting-exception"]) {
+            relationships.directParent = {
+              reportingException: directParentLinks["reporting-exception"],
+              reason: "EXCEPTION" // Will be replaced with actual reason later
+            };
+            hasDirectParent = true;
+          } else if (directParentLinks["lei-record"]) {
+            relationships.directParent = {
+              related: directParentLinks["lei-record"]
+            };
+            hasDirectParent = true;
+          }
+        }
+        
+        let hasUltimateParent = false;
+        if (record.relationships?.["ultimate-parent"]) {
+          const ultimateParentLinks = record.relationships["ultimate-parent"].links || {};
+          
+          if (ultimateParentLinks["relationship-record"]) {
+            relationships.ultimateParent = {
+              related: ultimateParentLinks["relationship-record"]
+            };
+            hasUltimateParent = true;
+          } else if (ultimateParentLinks["reporting-exception"]) {
+            relationships.ultimateParent = {
+              reportingException: ultimateParentLinks["reporting-exception"],
+              reason: "EXCEPTION" // Will be replaced with actual reason later
+            };
+            hasUltimateParent = true;
+          } else if (ultimateParentLinks["lei-record"]) {
+            relationships.ultimateParent = {
+              related: ultimateParentLinks["lei-record"]
+            };
+            hasUltimateParent = true;
+          }
+        }
+        
+        let hasChildren = false;
+        if (record.relationships?.["direct-children"]) {
+          const directChildrenLinks = record.relationships["direct-children"].links || {};
+          
+          if (directChildrenLinks["related"]) {
+            relationships.directChildren = {
+              related: directChildrenLinks["related"]
+            };
+            hasChildren = true;
+          }
+        }
+        
         const legalFormString = entity.legalForm && entity.legalForm.id
           ? `${entity.legalForm.id}${entity.legalForm.other ? ` - ${entity.legalForm.other}` : ''}`
           : undefined;
         
-        // Create entity category string
-        const entityCategoryString = entity.category || undefined;
+        const entityCategoryString = entity.category
+          ? entity.category
+          : undefined;
         
-        // Add the company data to the supplier object
         supplier.company = {
           name: entity.legalName.name,
           lei: record.id,
@@ -205,7 +267,12 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
           initialRegistrationDate: attributes.registration.initialRegistrationDate,
           lastUpdateDate: attributes.registration.lastUpdateDate,
           entityCategory: entityCategoryString,
-          hasDirectParent: hasDirectParent
+          hasDirectParent: hasDirectParent,
+          hasUltimateParent: hasUltimateParent,
+          hasChildren: hasChildren,
+          relationships: relationships,
+          bic: attributes.bic || [],
+          headquartersAddress: headquartersAddress
         };
         
         // Check for children
