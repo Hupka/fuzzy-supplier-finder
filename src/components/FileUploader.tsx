@@ -2,19 +2,15 @@
 import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 
-// OpenCorporates API Token
-const API_TOKEN = 'YOUR_API_TOKEN';
-
 interface Supplier {
   [key: string]: string | any;
   company?: {
     name: string;
-    company_number: string;
-    jurisdiction_code: string;
-    incorporation_date?: string;
-    company_type?: string;
-    registry_url?: string;
-    opencorporates_url?: string;
+    lei: string;
+    address: string;
+    jurisdiction: string;
+    status: string;
+    parentLei?: string;
   } | null;
 }
 
@@ -110,8 +106,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           return;
         }
 
-        // Call OpenCorporates API to match supplier names to companies
-        await matchSuppliersWithCompanies(suppliers);
+        // Match suppliers with GLEIF API instead of OpenCorporates
+        await matchSuppliersWithGLEIF(suppliers);
         
         onFileLoaded(suppliers);
         setLoading(false);
@@ -125,39 +121,61 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
     });
   };
 
-  const matchSuppliersWithCompanies = async (suppliers: Supplier[]) => {
+  const matchSuppliersWithGLEIF = async (suppliers: Supplier[]) => {
     let matchedCount = 0;
     
-    setProcessingStatus(`Matching suppliers with OpenCorporates... (0/${suppliers.length})`);
+    // For development, limit the number of API calls to avoid rate limits
+    let suppliersToProcess = [...suppliers];
+    const isDevelopment = process.env.NODE_ENV === 'development' || true; // Force dev mode for now
     
-    for (let i = 0; i < suppliers.length; i++) {
-      const supplier = suppliers[i];
-      setProcessingStatus(`Matching suppliers with OpenCorporates... (${i}/${suppliers.length})`);
+    if (isDevelopment && suppliersToProcess.length > 30) {
+      // Randomly select 20-30 suppliers
+      const sampleSize = Math.floor(Math.random() * 11) + 20; // Random number between 20-30
+      suppliersToProcess = suppliersToProcess
+        .sort(() => 0.5 - Math.random()) // Shuffle array
+        .slice(0, sampleSize); // Take first N elements
+      
+      console.log(`Development mode: Processing ${sampleSize} random suppliers out of ${suppliers.length}`);
+    }
+    
+    setProcessingStatus(`Matching suppliers with GLEIF API... (0/${suppliersToProcess.length})`);
+    
+    for (let i = 0; i < suppliersToProcess.length; i++) {
+      const supplier = suppliersToProcess[i];
+      setProcessingStatus(`Matching suppliers with GLEIF API... (${i+1}/${suppliersToProcess.length})`);
       
       try {
         // Encode the supplier name for the URL
         const encodedName = encodeURIComponent(supplier.name);
-        const url = `https://api.opencorporates.com/v0.4/companies/search?q=${encodedName}&api_token=${API_TOKEN}`;
+        const url = `https://api.gleif.org/api/v1/lei-records?filter[entity.legalName]=${encodedName}&page[size]=1`;
         
         const response = await fetch(url);
         const data = await response.json();
         
-        if (data.results && 
-            data.results.companies && 
-            data.results.companies.length > 0) {
+        if (data.data && data.data.length > 0) {
+          const record = data.data[0];
+          const attributes = record.attributes;
+          const entity = attributes.entity;
+          const legalAddress = entity.legalAddress;
           
-          // Get the first company match
-          const companyData = data.results.companies[0].company;
+          // Format address from components
+          const addressParts = [
+            legalAddress.addressLines?.join(', '),
+            legalAddress.city,
+            legalAddress.postalCode,
+            legalAddress.country
+          ].filter(Boolean);
+          
+          const formattedAddress = addressParts.join(', ');
           
           // Add the company data to the supplier object
           supplier.company = {
-            name: companyData.name,
-            company_number: companyData.company_number,
-            jurisdiction_code: companyData.jurisdiction_code,
-            incorporation_date: companyData.incorporation_date,
-            company_type: companyData.company_type,
-            registry_url: companyData.registry_url,
-            opencorporates_url: companyData.opencorporates_url
+            name: entity.legalName.name,
+            lei: record.id,
+            address: formattedAddress,
+            jurisdiction: entity.legalJurisdiction,
+            status: attributes.registration.status,
+            parentLei: entity.headquarters?.lei || undefined
           };
           
           matchedCount++;
@@ -167,7 +185,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
         }
         
         // Add a small delay to avoid hitting rate limits
-        await new Promise(resolve => setTimeout(resolve, 250));
+        await new Promise(resolve => setTimeout(resolve, 300));
         
       } catch (error) {
         console.error(`Error matching supplier ${supplier.name}:`, error);
@@ -175,7 +193,19 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
       }
     }
     
-    setProcessingStatus(`Completed matching: ${matchedCount} of ${suppliers.length} suppliers matched`);
+    // Update all suppliers with their GLEIF data (not just the sampled ones)
+    if (isDevelopment && suppliers.length > suppliersToProcess.length) {
+      const processedSupplierNames = suppliersToProcess.map(s => s.name);
+      
+      // Mark unprocessed suppliers as not matched
+      suppliers.forEach(supplier => {
+        if (!processedSupplierNames.includes(supplier.name)) {
+          supplier.company = null;
+        }
+      });
+    }
+    
+    setProcessingStatus(`Completed matching: ${matchedCount} of ${suppliersToProcess.length} suppliers matched`);
     return matchedCount;
   };
 

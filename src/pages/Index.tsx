@@ -8,12 +8,11 @@ interface Supplier {
   [key: string]: string | any;
   company?: {
     name: string;
-    company_number: string;
-    jurisdiction_code: string;
-    incorporation_date?: string;
-    company_type?: string;
-    registry_url?: string;
-    opencorporates_url?: string;
+    lei: string;
+    address: string;
+    jurisdiction: string;
+    status: string;
+    parentLei?: string;
   } | null;
 }
 
@@ -46,7 +45,7 @@ const Index = () => {
             Fuzzy Supplier Finder
           </h1>
           <p className="text-muted-foreground max-w-md mx-auto animate-slide-down">
-            Upload your CSV file with supplier information to match with real company data.
+            Upload your CSV file with supplier information to match with real company data using GLEIF API.
           </p>
         </div>
 
@@ -66,7 +65,7 @@ const Index = () => {
                 </h3>
                 
                 <Alert className="mt-4 bg-blue-50 border-blue-200">
-                  <AlertTitle>OpenCorporates API Results</AlertTitle>
+                  <AlertTitle>GLEIF API Results</AlertTitle>
                   <AlertDescription>
                     Successfully matched {matchedCount} out of {suppliers.length} suppliers 
                     ({Math.round((matchedCount / suppliers.length) * 100)}%) with company data.
@@ -74,7 +73,7 @@ const Index = () => {
                 </Alert>
                 
                 <p className="text-muted-foreground text-sm mt-4">
-                  Your suppliers have been successfully loaded and matched with OpenCorporates data.
+                  Your suppliers have been successfully loaded and matched with GLEIF LEI data.
                 </p>
               </div>
             </div>
