@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,6 +8,16 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+// Create global suppliers array
+declare global {
+  interface Window {
+    suppliers: any[];
+  }
+}
+
+// Initialize global suppliers array
+window.suppliers = [];
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
