@@ -5,6 +5,7 @@ import SupplierTable from "@/components/SupplierTable";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -72,6 +73,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 animate-fade-in">
+      <Toaster position="top-right" />
       <div className="w-full max-w-6xl">
         <div className="text-center mb-10 space-y-2">
           <div className="inline-flex items-center justify-center px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium mb-2 animate-slide-down">

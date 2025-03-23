@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 
@@ -64,7 +63,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
     setLoading(true);
     setProcessingStatus('Parsing CSV file...');
     
-    // We need to include Papa Parse via CDN
     if (typeof window.Papa === 'undefined') {
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js';
@@ -82,16 +80,12 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
       complete: async (results: { data: Supplier[], errors: any[], meta: any }) => {
         console.log("Raw CSV data:", results.data); // Add debug logging
         
-        // Filter out empty rows and map to a standardized format
         const suppliers = results.data
           .filter(supplier => {
-            // Filter out empty rows
             return Object.keys(supplier).length > 0 && 
                   Object.values(supplier).some(value => value.trim() !== "");
           })
           .map(supplier => {
-            // Create a normalized supplier object
-            // Check for various possible field names based on the German CSV format
             const normalizedSupplier: Supplier = {
               id: supplier["ID (Lieferanten Nr)"] || supplier["ID"] || "",
               name: supplier["Lieferant (Name)"] || supplier["Name"] || "",
@@ -100,7 +94,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
               status: supplier["Lieferanten-Status"] || supplier["Status"] || ""
             };
             
-            // Add all original fields as well
             return { ...supplier, ...normalizedSupplier };
           });
         
@@ -112,7 +105,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           return;
         }
 
-        // Match suppliers with GLEIF API
         await matchSuppliersWithGLEIF(suppliers);
         
         onFileLoaded(suppliers);
@@ -130,16 +122,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
   const matchSuppliersWithGLEIF = async (suppliers: Supplier[]) => {
     let matchedCount = 0;
     
-    // For development, limit the number of API calls to avoid rate limits
     let suppliersToProcess = [...suppliers];
-    const isDevelopment = process.env.NODE_ENV === 'development' || true; // Force dev mode for now
+    const isDevelopment = process.env.NODE_ENV === 'development' || true;
     
-    if (isDevelopment && suppliersToProcess.length > 60) {
-      // Updated to 60 random suppliers
-      const sampleSize = 60;
+    if (isDevelopment && suppliersToProcess.length > 40) {
+      const sampleSize = 40;
       suppliersToProcess = suppliersToProcess
-        .sort(() => 0.5 - Math.random()) // Shuffle array
-        .slice(0, sampleSize); // Take first 60 elements
+        .sort(() => 0.5 - Math.random())
+        .slice(0, sampleSize);
       
       console.log(`Development mode: Processing ${sampleSize} random suppliers out of ${suppliers.length}`);
     }
@@ -151,7 +141,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
       setProcessingStatus(`Matching suppliers with GLEIF API... (${i+1}/${suppliersToProcess.length})`);
       
       try {
-        // Encode the supplier name for the URL
         const encodedName = encodeURIComponent(supplier.name);
         const url = `https://api.gleif.org/api/v1/lei-records?filter[entity.legalName]=${encodedName}&page[size]=1`;
         
@@ -164,7 +153,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           const entity = attributes.entity;
           const legalAddress = entity.legalAddress;
           
-          // Format address from components
           const addressParts = [
             legalAddress.addressLines?.join(', '),
             legalAddress.city,
@@ -174,7 +162,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           
           const formattedAddress = addressParts.join(', ');
           
-          // Add the company data to the supplier object with additional fields
           supplier.company = {
             name: entity.legalName.name,
             lei: record.id,
@@ -182,7 +169,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             jurisdiction: entity.legalJurisdiction,
             status: attributes.registration.status,
             parentLei: entity.headquarters?.lei || undefined,
-            // Additional interesting data points from the API
             legalForm: entity.legalForm?.name,
             registrationAuthority: attributes.registration.managingLou,
             nextRenewalDate: attributes.registration.nextRenewalDate,
@@ -193,27 +179,21 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           
           matchedCount++;
         } else {
-          // Mark as unmatched
           supplier.company = null;
         }
         
-        // Add a small delay to avoid hitting rate limits
         await new Promise(resolve => setTimeout(resolve, 250));
-        
       } catch (error) {
         console.error(`Error matching supplier ${supplier.name}:`, error);
         supplier.company = null;
       }
     }
     
-    // For unprocessed suppliers, mark them as not attempted (undefined)
     if (isDevelopment && suppliers.length > suppliersToProcess.length) {
       const processedSupplierNames = suppliersToProcess.map(s => s.name);
       
-      // Mark unprocessed suppliers as not attempted
       suppliers.forEach(supplier => {
         if (!processedSupplierNames.includes(supplier.name)) {
-          // undefined means "not attempted" while null means "attempted but no match"
           supplier.company = undefined;
         }
       });
@@ -275,7 +255,6 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
   );
 };
 
-// For TypeScript global declaration
 declare global {
   interface Window {
     Papa: any;
