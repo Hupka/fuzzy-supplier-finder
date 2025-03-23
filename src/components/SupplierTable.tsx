@@ -63,6 +63,7 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
   const [filteredSuppliers, setFilteredSuppliers] = useState<Supplier[]>(suppliers);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all"); // "all", "matched", "not-matched", "not-attempted"
+  const [pendingMatches, setPendingMatches] = useState<Set<string>>(new Set());
 
   // Count suppliers with match attempts
   const attemptedCount = suppliers.filter(
@@ -132,8 +133,17 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
   };
 
   const refetchSupplier = async (supplier: Supplier, index: number) => {
+    // Check if we're already fetching this supplier to prevent duplicate requests
+    if (pendingMatches.has(supplier.name)) {
+      return; // Already in progress, don't start another request
+    }
+
     try {
-      toast.info(`Attempting to match ${supplier.name}...`);
+      // Add supplier to pending matches
+      setPendingMatches(prev => new Set(prev).add(supplier.name));
+      
+      // Display a single loading toast with an ID we can reference later
+      const toastId = toast.loading(`Attempting to match ${supplier.name}...`);
       
       // Encode the supplier name for the URL
       const encodedName = encodeURIComponent(supplier.name);
@@ -174,11 +184,17 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
           entityCategory: entity.category?.name
         };
         
-        toast.success(`Successfully matched ${supplier.name}`);
+        // Update the loading toast to success (replacing it)
+        toast.success(`Successfully matched ${supplier.name}`, {
+          id: toastId,
+        });
       } else {
         // Mark as unmatched
         supplier.company = null;
-        toast.error(`No match found for ${supplier.name}`);
+        // Update the loading toast to error (replacing it)
+        toast.error(`No match found for ${supplier.name}`, {
+          id: toastId,
+        });
       }
       
       // Force a re-render by creating a new suppliers array
@@ -187,8 +203,16 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
     } catch (error) {
       console.error(`Error matching supplier ${supplier.name}:`, error);
       supplier.company = null;
+      // Show error toast
       toast.error(`Error matching ${supplier.name}`);
       setFilteredSuppliers([...filteredSuppliers]);
+    } finally {
+      // Remove supplier from pending matches when done
+      setPendingMatches(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(supplier.name);
+        return newSet;
+      });
     }
   };
 
@@ -303,8 +327,9 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                           size="sm"
                           className="h-6 w-6 p-0"
                           onClick={() => refetchSupplier(supplier, index)}
+                          disabled={pendingMatches.has(supplier.name)}
                         >
-                          <RefreshCcw className="h-3 w-3" />
+                          <RefreshCcw className={`h-3 w-3 ${pendingMatches.has(supplier.name) ? 'animate-spin' : ''}`} />
                         </Button>
                       </>
                     ) : supplier.company === null ? (
@@ -318,8 +343,9 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                           size="sm"
                           className="h-6 w-6 p-0"
                           onClick={() => refetchSupplier(supplier, index)}
+                          disabled={pendingMatches.has(supplier.name)}
                         >
-                          <RefreshCcw className="h-3 w-3" />
+                          <RefreshCcw className={`h-3 w-3 ${pendingMatches.has(supplier.name) ? 'animate-spin' : ''}`} />
                         </Button>
                       </>
                     ) : (
