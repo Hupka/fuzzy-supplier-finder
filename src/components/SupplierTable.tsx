@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -313,7 +312,7 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         <TableHeader>
           <TableRow className="h-10">
             <TableHead className="w-[420px]">Company Information</TableHead>
-            <TableHead className="w-[140px]">Match Result</TableHead>
+            <TableHead className="w-[160px]">Match Result</TableHead>
             <TableHead className="w-[180px]">Address</TableHead>
             <TableHead className="w-[120px]">Status</TableHead>
             <TableHead className="w-[120px]">Relationships</TableHead>
@@ -344,28 +343,28 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="max-w-[140px] truncate inline-block">
-                              {supplier.name}
-                            </span>
+                            {supplier.company ? (
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="h-auto p-0 justify-start font-medium text-sm text-left hover:no-underline group"
+                                onClick={() => onShowDetails(supplier)}
+                              >
+                                <span className="max-w-[220px] truncate group-hover:text-primary">
+                                  {supplier.name}
+                                </span>
+                              </Button>
+                            ) : (
+                              <span className="max-w-[220px] truncate inline-block">
+                                {supplier.name}
+                              </span>
+                            )}
                           </TooltipTrigger>
                           <TooltipContent>
                             <p>{supplier.name}</p>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                      
-                      {supplier.company && (
-                        <Button
-                          variant="link"
-                          size="sm"
-                          className="h-auto p-0 justify-start font-normal text-sm text-left hover:no-underline group"
-                          onClick={() => onShowDetails(supplier)}
-                        >
-                          <span className="max-w-[220px] truncate group-hover:text-primary">
-                            {supplier.company.name}
-                          </span>
-                        </Button>
-                      )}
                       
                       {supplier.company && (
                         <div className="text-xs font-mono text-muted-foreground mt-1">
@@ -379,7 +378,7 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                   <div className="flex items-center gap-2">
                     {supplier.company === undefined ? (
                       <>
-                        <span className="text-muted-foreground text-xs">Not attempted</span>
+                        <span className="text-muted-foreground text-xs whitespace-nowrap">Not attempted</span>
                         <Button
                           variant="ghost"
                           size="sm"
