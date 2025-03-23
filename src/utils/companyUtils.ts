@@ -299,6 +299,29 @@ export const fetchParentCompany = async (company: any): Promise<{
       }
     }
     
+    // Try the direct related link (entity relationship)
+    if (relationships.related) {
+      console.log("Fetching parent using related link:", relationships.related);
+      const response = await fetch(relationships.related);
+      const result = await response.json();
+      
+      if (result.data && result.data.relationships?.["lei-record"]?.links?.related) {
+        // Follow the link to the LEI record
+        const leiUrl = result.data.relationships["lei-record"].links.related;
+        const leiResponse = await fetch(leiUrl);
+        const leiData = await leiResponse.json();
+        
+        if (leiData.data) {
+          const parentEntity = parseCompanyFromGLEIF(leiData.data);
+          console.log("Found parent entity:", parentEntity.name);
+          return { 
+            parentEntity, 
+            parentException: null 
+          };
+        }
+      }
+    }
+    
     // Then check for direct LEI record link
     if (relationships.leiRecord) {
       const recordResult = await followRelationshipLink(relationships.leiRecord);
@@ -352,6 +375,29 @@ export const fetchUltimateParentCompany = async (company: any): Promise<{
           parentEntity: null, 
           parentException: exceptionResult.data 
         };
+      }
+    }
+    
+    // Try the direct related link (entity relationship)
+    if (relationships.related) {
+      console.log("Fetching ultimate parent using related link:", relationships.related);
+      const response = await fetch(relationships.related);
+      const result = await response.json();
+      
+      if (result.data && result.data.relationships?.["lei-record"]?.links?.related) {
+        // Follow the link to the LEI record
+        const leiUrl = result.data.relationships["lei-record"].links.related;
+        const leiResponse = await fetch(leiUrl);
+        const leiData = await leiResponse.json();
+        
+        if (leiData.data) {
+          const parentEntity = parseCompanyFromGLEIF(leiData.data);
+          console.log("Found ultimate parent entity:", parentEntity.name);
+          return { 
+            parentEntity, 
+            parentException: null 
+          };
+        }
       }
     }
     
@@ -417,6 +463,8 @@ export const fetchCorporateHierarchy = async (company: any) => {
         console.log("Direct parent found:", hierarchyData.directParent.name);
       } else if (hierarchyData.directParentException) {
         console.log("Direct parent exception:", hierarchyData.directParentException.reason);
+      } else {
+        console.log("No direct parent information could be retrieved");
       }
     }
     
@@ -431,6 +479,8 @@ export const fetchCorporateHierarchy = async (company: any) => {
         console.log("Ultimate parent found:", hierarchyData.ultimateParent.name);
       } else if (hierarchyData.ultimateParentException) {
         console.log("Ultimate parent exception:", hierarchyData.ultimateParentException.reason);
+      } else {
+        console.log("No ultimate parent information could be retrieved");
       }
     }
     
@@ -451,5 +501,6 @@ export const fetchCorporateHierarchy = async (company: any) => {
     hierarchyData.loading = false;
   }
   
+  console.log("Hierarchy loaded:", hierarchyData);
   return hierarchyData;
 };
