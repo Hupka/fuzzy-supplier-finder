@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from "react";
-import { toast } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 interface Supplier {
   [key: string]: string;
