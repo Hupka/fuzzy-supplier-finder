@@ -17,7 +17,10 @@ import {
   RefreshCcw, 
   Search, 
   Filter,
-  X
+  X,
+  Network,
+  ExternalLink,
+  Building2
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -45,6 +48,8 @@ interface Company {
   initialRegistrationDate?: string;
   lastUpdateDate?: string;
   entityCategory?: string;
+  hasParent?: boolean;
+  hasChildren?: boolean;
 }
 
 interface Supplier {
@@ -56,6 +61,18 @@ interface SupplierTableProps {
   suppliers: Supplier[];
   onShowDetails: (supplier: Supplier) => void;
 }
+
+// Status code descriptions for tooltips
+const statusDescriptions: Record<string, string> = {
+  "ISSUED": "The LEI is active and valid",
+  "LAPSED": "The LEI registration has expired and needs renewal",
+  "PENDING_TRANSFER": "The LEI is in the process of being transferred to another managing authority",
+  "RETIRED": "The LEI is no longer in use (entity dissolved or merged)",
+  "DUPLICATE": "The LEI has been marked as a duplicate of another LEI",
+  "ANNULLED": "The LEI has been cancelled due to discovery that it should not have been issued",
+  "MERGED": "The legal entity represented by this LEI has merged with another entity",
+  "PENDING_VALIDATION": "The LEI has been requested but is awaiting validation"
+};
 
 const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails }) => {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
@@ -168,6 +185,9 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         
         const formattedAddress = addressParts.join(', ');
         
+        // Check for parent/child relationships
+        const hasParent = !!(entity.parent?.lei || entity.headquarters?.lei);
+        
         // Add the company data to the supplier object
         supplier.company = {
           name: entity.legalName.name,
@@ -175,14 +195,29 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
           address: formattedAddress,
           jurisdiction: entity.legalJurisdiction,
           status: attributes.registration.status,
-          parentLei: entity.headquarters?.lei || undefined,
-          legalForm: entity.legalForm?.name,
+          parentLei: entity.parent?.lei || entity.headquarters?.lei || undefined,
+          legalForm: entity.legalForm?.id ? `${entity.legalForm.id} - ${entity.legalForm.name}` : undefined,
           registrationAuthority: attributes.registration.managingLou,
           nextRenewalDate: attributes.registration.nextRenewalDate,
           initialRegistrationDate: attributes.registration.initialRegistrationDate,
           lastUpdateDate: attributes.registration.lastUpdateDate,
-          entityCategory: entity.category?.name
+          entityCategory: entity.category?.id ? `${entity.category.id} - ${entity.category.name}` : undefined,
+          hasParent
         };
+        
+        // Check for children
+        try {
+          const childrenUrl = `https://api.gleif.org/api/v1/lei-records?filter[entity.parent.lei]=${record.id}&page[size]=1`;
+          const childrenResponse = await fetch(childrenUrl);
+          const childrenData = await childrenResponse.json();
+          
+          const hasChildren = !!(childrenData.data && childrenData.data.length > 0);
+          supplier.company.hasChildren = hasChildren;
+          
+        } catch (error) {
+          console.error("Error checking for children:", error);
+          supplier.company.hasChildren = false;
+        }
         
         // Update the loading toast to success (replacing it)
         toast.success(`Successfully matched ${supplier.name}`, {
@@ -273,14 +308,13 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         </TableCaption>
         <TableHeader>
           <TableRow className="h-10">
-            <TableHead className="w-[180px]">Original Name</TableHead>
+            <TableHead className="w-[200px]">Original Name</TableHead>
             <TableHead className="w-[140px]">Match Result</TableHead>
-            <TableHead className="w-[180px]">Official Company Name</TableHead>
+            <TableHead className="w-[220px]">Official Company Name</TableHead>
             <TableHead className="w-[140px]">LEI</TableHead>
             <TableHead className="w-[180px]">Address</TableHead>
-            <TableHead className="w-[100px]">Jurisdiction</TableHead>
             <TableHead className="w-[100px]">Status</TableHead>
-            <TableHead className="text-right w-[100px]">Actions</TableHead>
+            <TableHead className="w-[100px]">Relationships</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -354,22 +388,23 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                   </div>
                 </TableCell>
                 <TableCell className="py-2">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="max-w-[140px] truncate inline-block">
-                          {supplier.company?.name || (
-                            <span className="text-muted-foreground">—</span>
-                          )}
+                  {supplier.company ? (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 justify-start font-normal text-left hover:no-underline group flex items-center gap-1"
+                        onClick={() => onShowDetails(supplier)}
+                      >
+                        <span className="max-w-[170px] truncate group-hover:text-primary">
+                          {supplier.company.name}
                         </span>
-                      </TooltipTrigger>
-                      {supplier.company?.name && (
-                        <TooltipContent>
-                          <p>{supplier.company.name}</p>
-                        </TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
+                        <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="py-2 font-mono text-xs">
                   {supplier.company?.lei || (
@@ -395,58 +430,111 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                   </TooltipProvider>
                 </TableCell>
                 <TableCell className="py-2">
-                  {supplier.company?.jurisdiction || (
+                  {supplier.company?.status ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className={`px-2 py-0.5 rounded-full text-xs inline-flex items-center
+                            ${supplier.company.status === 'ISSUED' 
+                              ? 'bg-green-100 text-green-800' 
+                              : supplier.company.status === 'LAPSED' 
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-gray-100 text-gray-800'}`}
+                          >
+                            {supplier.company.status}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{statusDescriptions[supplier.company.status] || 'Status description not available'}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
                 </TableCell>
                 <TableCell className="py-2">
-                  {supplier.company?.status || (
+                  {supplier.company ? (
+                    <div className="flex gap-2">
+                      {supplier.company.hasParent && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center text-blue-500">
+                                <ChevronUp className="h-4 w-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Has parent company</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {supplier.company.hasChildren && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center text-green-500">
+                                <ChevronDown className="h-4 w-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Has subsidiaries</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {!supplier.company.hasParent && !supplier.company.hasChildren && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center text-gray-400">
+                                <Building2 className="h-4 w-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>No parent or subsidiary relationships</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
+                  ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
-                </TableCell>
-                <TableCell className="text-right py-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onShowDetails(supplier)}
-                    disabled={!supplier.company}
-                    className="h-7 px-2 text-xs"
-                  >
-                    Details
-                  </Button>
                 </TableCell>
               </TableRow>
               {expandedRows.has(index) && supplier.company && (
                 <TableRow className="bg-muted/50">
-                  <TableCell colSpan={8} className="p-3">
+                  <TableCell colSpan={7} className="p-3">
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <h4 className="font-medium mb-2 text-xs">Additional Information</h4>
-                        <dl className="grid grid-cols-[100px_1fr] gap-1 text-xs">
+                        <dl className="grid grid-cols-[120px_1fr] gap-1 text-xs">
                           <dt className="text-muted-foreground">Legal Form:</dt>
-                          <dd>{supplier.company.legalForm || "—"}</dd>
+                          <dd>{supplier.company.legalForm || "Not available"}</dd>
                           
                           <dt className="text-muted-foreground">Entity Category:</dt>
-                          <dd>{supplier.company.entityCategory || "—"}</dd>
+                          <dd>{supplier.company.entityCategory || "Not available"}</dd>
                           
                           <dt className="text-muted-foreground">Registration:</dt>
-                          <dd>{supplier.company.registrationAuthority || "—"}</dd>
+                          <dd>{supplier.company.registrationAuthority || "Not available"}</dd>
                         </dl>
                       </div>
                       <div>
                         <h4 className="font-medium mb-2 text-xs">Registration Dates</h4>
-                        <dl className="grid grid-cols-[100px_1fr] gap-1 text-xs">
+                        <dl className="grid grid-cols-[120px_1fr] gap-1 text-xs">
                           <dt className="text-muted-foreground">Initial:</dt>
                           <dd>{supplier.company.initialRegistrationDate ? 
-                            new Date(supplier.company.initialRegistrationDate).toLocaleDateString() : "—"}</dd>
+                            new Date(supplier.company.initialRegistrationDate).toLocaleDateString() : "Not available"}</dd>
                           
                           <dt className="text-muted-foreground">Last Update:</dt>
                           <dd>{supplier.company.lastUpdateDate ? 
-                            new Date(supplier.company.lastUpdateDate).toLocaleDateString() : "—"}</dd>
+                            new Date(supplier.company.lastUpdateDate).toLocaleDateString() : "Not available"}</dd>
                           
                           <dt className="text-muted-foreground">Next Renewal:</dt>
                           <dd>{supplier.company.nextRenewalDate ? 
-                            new Date(supplier.company.nextRenewalDate).toLocaleDateString() : "—"}</dd>
+                            new Date(supplier.company.nextRenewalDate).toLocaleDateString() : "Not available"}</dd>
                         </dl>
                       </div>
                     </div>

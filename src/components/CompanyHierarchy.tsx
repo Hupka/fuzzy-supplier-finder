@@ -21,6 +21,18 @@ interface CompanyHierarchyProps {
   isLoading: boolean;
 }
 
+// Status code descriptions for tooltips
+const statusDescriptions: Record<string, string> = {
+  "ISSUED": "The LEI is active and valid",
+  "LAPSED": "The LEI registration has expired and needs renewal",
+  "PENDING_TRANSFER": "The LEI is in the process of being transferred to another managing authority",
+  "RETIRED": "The LEI is no longer in use (entity dissolved or merged)",
+  "DUPLICATE": "The LEI has been marked as a duplicate of another LEI",
+  "ANNULLED": "The LEI has been cancelled due to discovery that it should not have been issued",
+  "MERGED": "The legal entity represented by this LEI has merged with another entity",
+  "PENDING_VALIDATION": "The LEI has been requested but is awaiting validation"
+};
+
 const CompanyHierarchy: React.FC<CompanyHierarchyProps> = ({
   currentCompany,
   parentCompany,
@@ -60,7 +72,14 @@ const CompanyHierarchy: React.FC<CompanyHierarchyProps> = ({
                         <div><span className="font-medium">Jurisdiction:</span> {parentCompany.jurisdiction}</div>
                       )}
                       {parentCompany.status && (
-                        <div><span className="font-medium">Status:</span> {parentCompany.status}</div>
+                        <div>
+                          <span className="font-medium">Status:</span> {parentCompany.status}
+                          {statusDescriptions[parentCompany.status] && (
+                            <span className="text-xs text-muted-foreground ml-1">
+                              ({statusDescriptions[parentCompany.status]})
+                            </span>
+                          )}
+                        </div>
                       )}
                       {parentCompany.entityCategory && (
                         <div><span className="font-medium">Entity Type:</span> {parentCompany.entityCategory}</div>
@@ -95,7 +114,14 @@ const CompanyHierarchy: React.FC<CompanyHierarchyProps> = ({
                       <div><span className="font-medium">Jurisdiction:</span> {currentCompany.jurisdiction}</div>
                     )}
                     {currentCompany.status && (
-                      <div><span className="font-medium">Status:</span> {currentCompany.status}</div>
+                      <div>
+                        <span className="font-medium">Status:</span> {currentCompany.status}
+                        {statusDescriptions[currentCompany.status] && (
+                          <span className="text-xs text-muted-foreground ml-1">
+                            ({statusDescriptions[currentCompany.status]})
+                          </span>
+                        )}
+                      </div>
                     )}
                     {currentCompany.entityCategory && (
                       <div><span className="font-medium">Entity Type:</span> {currentCompany.entityCategory}</div>
@@ -143,7 +169,14 @@ const CompanyHierarchy: React.FC<CompanyHierarchyProps> = ({
                               <div><span className="font-medium">Jurisdiction:</span> {child.jurisdiction}</div>
                             )}
                             {child.status && (
-                              <div><span className="font-medium">Status:</span> {child.status}</div>
+                              <div>
+                                <span className="font-medium">Status:</span> {child.status}
+                                {statusDescriptions[child.status] && (
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    ({statusDescriptions[child.status]})
+                                  </span>
+                                )}
+                              </div>
                             )}
                             {child.entityCategory && (
                               <div><span className="font-medium">Entity Type:</span> {child.entityCategory}</div>
