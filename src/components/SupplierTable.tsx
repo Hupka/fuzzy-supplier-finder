@@ -18,8 +18,6 @@ import {
   Search, 
   Filter,
   X,
-  Network,
-  ExternalLink,
   Building2
 } from "lucide-react";
 import { toast } from "sonner";
@@ -29,11 +27,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
 
 interface Company {
   name: string;
@@ -179,30 +172,42 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         const addressParts = [
           legalAddress.addressLines?.join(', '),
           legalAddress.city,
+          legalAddress.region,
           legalAddress.postalCode,
           legalAddress.country
         ].filter(Boolean);
         
         const formattedAddress = addressParts.join(', ');
         
-        // Check for parent/child relationships
-        const hasParent = !!(entity.parent?.lei || entity.headquarters?.lei);
+        // Check for parent relationship
+        const hasDirectParent = !!entity.associatedEntity?.lei || 
+          (record.relationships && 
+           record.relationships["direct-parent"] && 
+           !record.relationships["direct-parent"].links.reporting);
+        
+        // Create legal form string if available
+        const legalFormString = entity.legalForm && entity.legalForm.id
+          ? `${entity.legalForm.id}${entity.legalForm.other ? ` - ${entity.legalForm.other}` : ''}`
+          : undefined;
+        
+        // Create entity category string
+        const entityCategoryString = entity.category || undefined;
         
         // Add the company data to the supplier object
         supplier.company = {
           name: entity.legalName.name,
           lei: record.id,
           address: formattedAddress,
-          jurisdiction: entity.legalJurisdiction,
+          jurisdiction: entity.jurisdiction,
           status: attributes.registration.status,
-          parentLei: entity.parent?.lei || entity.headquarters?.lei || undefined,
-          legalForm: entity.legalForm?.id ? `${entity.legalForm.id} - ${entity.legalForm.name}` : undefined,
+          parentLei: entity.associatedEntity?.lei || undefined,
+          legalForm: legalFormString,
           registrationAuthority: attributes.registration.managingLou,
           nextRenewalDate: attributes.registration.nextRenewalDate,
           initialRegistrationDate: attributes.registration.initialRegistrationDate,
           lastUpdateDate: attributes.registration.lastUpdateDate,
-          entityCategory: entity.category?.id ? `${entity.category.id} - ${entity.category.name}` : undefined,
-          hasParent
+          entityCategory: entityCategoryString,
+          hasParent: hasDirectParent
         };
         
         // Check for children
@@ -308,10 +313,8 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
         </TableCaption>
         <TableHeader>
           <TableRow className="h-10">
-            <TableHead className="w-[200px]">Original Name</TableHead>
+            <TableHead className="w-[420px]">Company Information</TableHead>
             <TableHead className="w-[140px]">Match Result</TableHead>
-            <TableHead className="w-[220px]">Official Company Name</TableHead>
-            <TableHead className="w-[140px]">LEI</TableHead>
             <TableHead className="w-[180px]">Address</TableHead>
             <TableHead className="w-[100px]">Status</TableHead>
             <TableHead className="w-[100px]">Relationships</TableHead>
@@ -337,18 +340,40 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                         )}
                       </Button>
                     )}
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="max-w-[140px] truncate inline-block">
-                            {supplier.name}
+                    
+                    <div className="flex flex-col">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="max-w-[140px] truncate inline-block">
+                              {supplier.name}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{supplier.name}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                      
+                      {supplier.company && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 justify-start font-normal text-sm text-left hover:no-underline group"
+                          onClick={() => onShowDetails(supplier)}
+                        >
+                          <span className="max-w-[220px] truncate group-hover:text-primary">
+                            {supplier.company.name}
                           </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{supplier.name}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                        </Button>
+                      )}
+                      
+                      {supplier.company && (
+                        <div className="text-xs font-mono text-muted-foreground mt-1">
+                          {supplier.company.lei}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="py-2">
@@ -386,30 +411,6 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
                       <span className="text-green-500 text-xs">Matched</span>
                     )}
                   </div>
-                </TableCell>
-                <TableCell className="py-2">
-                  {supplier.company ? (
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-auto p-0 justify-start font-normal text-left hover:no-underline group flex items-center gap-1"
-                        onClick={() => onShowDetails(supplier)}
-                      >
-                        <span className="max-w-[170px] truncate group-hover:text-primary">
-                          {supplier.company.name}
-                        </span>
-                        <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell className="py-2 font-mono text-xs">
-                  {supplier.company?.lei || (
-                    <span className="text-muted-foreground">—</span>
-                  )}
                 </TableCell>
                 <TableCell className="py-2">
                   <TooltipProvider>
@@ -506,7 +507,7 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
               </TableRow>
               {expandedRows.has(index) && supplier.company && (
                 <TableRow className="bg-muted/50">
-                  <TableCell colSpan={7} className="p-3">
+                  <TableCell colSpan={5} className="p-3">
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <h4 className="font-medium mb-2 text-xs">Additional Information</h4>

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from "react";
 import { toast } from "sonner";
 
@@ -156,25 +157,43 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           const addressParts = [
             legalAddress.addressLines?.join(', '),
             legalAddress.city,
+            legalAddress.region,
             legalAddress.postalCode,
             legalAddress.country
           ].filter(Boolean);
           
           const formattedAddress = addressParts.join(', ');
           
+          // Check for parent relationships
+          const hasDirectParent = !!entity.associatedEntity?.lei || 
+            (record.relationships && 
+             record.relationships["direct-parent"] && 
+             !record.relationships["direct-parent"].links.reporting);
+          
+          // Create full legal form string if available
+          const legalFormString = entity.legalForm && entity.legalForm.id
+            ? `${entity.legalForm.id}${entity.legalForm.other ? ` - ${entity.legalForm.other}` : ''}`
+            : undefined;
+          
+          // Create full entity category string if available
+          const entityCategoryString = entity.category
+            ? entity.category
+            : undefined;
+          
           supplier.company = {
             name: entity.legalName.name,
             lei: record.id,
             address: formattedAddress,
-            jurisdiction: entity.legalJurisdiction,
+            jurisdiction: entity.jurisdiction,
             status: attributes.registration.status,
-            parentLei: entity.headquarters?.lei || undefined,
-            legalForm: entity.legalForm?.name,
+            parentLei: entity.associatedEntity?.lei || undefined,
+            legalForm: legalFormString,
             registrationAuthority: attributes.registration.managingLou,
             nextRenewalDate: attributes.registration.nextRenewalDate,
             initialRegistrationDate: attributes.registration.initialRegistrationDate,
             lastUpdateDate: attributes.registration.lastUpdateDate,
-            entityCategory: entity.category?.name
+            entityCategory: entityCategoryString,
+            hasParent: hasDirectParent
           };
           
           matchedCount++;

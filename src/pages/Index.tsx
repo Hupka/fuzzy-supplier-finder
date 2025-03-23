@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import FileUploader from "@/components/FileUploader";
 import SupplierTable from "@/components/SupplierTable";
@@ -44,6 +43,7 @@ interface Company {
   initialRegistrationDate?: string;
   lastUpdateDate?: string;
   entityCategory?: string;
+  hasParent?: boolean;
 }
 
 interface Supplier {
@@ -72,10 +72,7 @@ const Index = () => {
     setIsLoaded(true);
     setShowTable(true);
     
-    // Store in global variable as requested
     window.suppliers = parsedSuppliers;
-    
-    // Log to console to confirm data is parsed
     console.log("Parsed suppliers with company matches:", parsedSuppliers);
   };
 
@@ -85,7 +82,6 @@ const Index = () => {
     setIsLoadingHierarchy(true);
     
     try {
-      // Create the current company node
       const currentNode: CompanyNode = {
         lei: company.lei,
         name: company.name,
@@ -98,7 +94,6 @@ const Index = () => {
       let parentNode: CompanyNode | null = null;
       const childNodes: CompanyNode[] = [];
       
-      // Fetch parent company if parentLei exists
       if (company.parentLei) {
         try {
           const parentResponse = await fetch(`https://api.gleif.org/api/v1/lei-records/${company.parentLei}`);
@@ -108,13 +103,15 @@ const Index = () => {
             const parentAttributes = parentData.data.attributes;
             const parentEntity = parentAttributes.entity;
             
+            const entityCategoryString = parentEntity.category || undefined;
+            
             parentNode = {
               lei: company.parentLei,
               name: parentEntity.legalName.name,
-              relationship: parentEntity.category?.name || "Parent Company",
-              jurisdiction: parentEntity.legalJurisdiction,
+              relationship: entityCategoryString || "Parent Company",
+              jurisdiction: parentEntity.jurisdiction,
               status: parentAttributes.registration.status,
-              entityCategory: parentEntity.category?.name
+              entityCategory: entityCategoryString
             };
           }
         } catch (error) {
@@ -123,7 +120,6 @@ const Index = () => {
         }
       }
       
-      // Fetch child companies
       try {
         const childrenResponse = await fetch(`https://api.gleif.org/api/v1/lei-records?filter[entity.parent.lei]=${company.lei}&page[size]=10`);
         const childrenData = await childrenResponse.json();
@@ -133,13 +129,15 @@ const Index = () => {
             const childAttributes = child.attributes;
             const childEntity = childAttributes.entity;
             
+            const entityCategoryString = childEntity.category || undefined;
+            
             childNodes.push({
               lei: child.id,
               name: childEntity.legalName.name,
-              relationship: childEntity.category?.name || "Subsidiary",
-              jurisdiction: childEntity.legalJurisdiction,
+              relationship: entityCategoryString || "Subsidiary",
+              jurisdiction: childEntity.jurisdiction,
               status: childAttributes.registration.status,
-              entityCategory: childEntity.category?.name
+              entityCategory: entityCategoryString
             });
           });
         }
@@ -148,14 +146,12 @@ const Index = () => {
         toast.error("Error fetching subsidiary information");
       }
       
-      // Set the hierarchy data
       setHierarchyData({
         currentCompany: currentNode,
         parentCompany: parentNode,
         childCompanies: childNodes
       });
       
-      // Switch to the hierarchy tab
       setActiveTab("hierarchy");
     } catch (error) {
       console.error("Error fetching company hierarchy:", error);
@@ -169,11 +165,9 @@ const Index = () => {
     setSelectedSupplier(supplier);
     setDetailsDialogOpen(true);
     
-    // Reset hierarchy data
     setHierarchyData(null);
     setActiveTab("details");
     
-    // Fetch hierarchy data if company exists
     if (supplier.company) {
       await fetchCompanyHierarchy(supplier.company);
     }
@@ -183,7 +177,6 @@ const Index = () => {
     setIsLoadingHierarchy(true);
     
     try {
-      // Fetch the company details by LEI
       const response = await fetch(`https://api.gleif.org/api/v1/lei-records/${lei}`);
       const data = await response.json();
       
@@ -192,42 +185,50 @@ const Index = () => {
         const entity = attributes.entity;
         const legalAddress = entity.legalAddress;
         
-        // Format address from components
         const addressParts = [
           legalAddress.addressLines?.join(', '),
           legalAddress.city,
+          legalAddress.region,
           legalAddress.postalCode,
           legalAddress.country
         ].filter(Boolean);
         
         const formattedAddress = addressParts.join(', ');
         
-        // Create a new company object
+        const hasDirectParent = !!entity.associatedEntity?.lei || 
+          (data.data.relationships && 
+           data.data.relationships["direct-parent"] && 
+           !data.data.relationships["direct-parent"].links.reporting);
+        
+        const legalFormString = entity.legalForm && entity.legalForm.id
+          ? `${entity.legalForm.id}${entity.legalForm.other ? ` - ${entity.legalForm.other}` : ''}`
+          : undefined;
+        
+        const entityCategoryString = entity.category || undefined;
+        
         const company: Company = {
           name: entity.legalName.name,
           lei: data.data.id,
           address: formattedAddress,
-          jurisdiction: entity.legalJurisdiction,
+          jurisdiction: entity.jurisdiction,
           status: attributes.registration.status,
-          parentLei: entity.headquarters?.lei || entity.parent?.lei,
-          legalForm: entity.legalForm?.name,
+          parentLei: entity.associatedEntity?.lei || undefined,
+          legalForm: legalFormString,
           registrationAuthority: attributes.registration.managingLou,
           nextRenewalDate: attributes.registration.nextRenewalDate,
           initialRegistrationDate: attributes.registration.initialRegistrationDate,
           lastUpdateDate: attributes.registration.lastUpdateDate,
-          entityCategory: entity.category?.name
+          entityCategory: entityCategoryString,
+          hasParent: hasDirectParent
         };
         
-        // Create a synthetic supplier with this company
         const syntheticSupplier: Supplier = {
           name: company.name,
           company: company
         };
         
-        // Update the selected supplier
         setSelectedSupplier(syntheticSupplier);
         
-        // Fetch the hierarchy for this company
         await fetchCompanyHierarchy(company);
       } else {
         toast.error("Could not find company with the provided LEI");
@@ -240,7 +241,6 @@ const Index = () => {
     }
   };
 
-  // Calculate how many suppliers were matched
   const matchedCount = suppliers.filter(supplier => supplier.company !== null && supplier.company !== undefined).length;
   const attemptedCount = suppliers.filter(supplier => supplier.company !== undefined).length;
 
@@ -314,7 +314,6 @@ const Index = () => {
                 </div>
               )}
               
-              {/* Company Details Dialog */}
               <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                   {selectedSupplier?.company && (
