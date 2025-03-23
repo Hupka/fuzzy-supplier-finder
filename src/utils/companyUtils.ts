@@ -1,4 +1,3 @@
-
 /**
  * Utility functions for company data handling
  */
@@ -216,7 +215,7 @@ async function followRelationshipLink(linkUrl: string): Promise<{type: string; d
         return { 
           type: "lei-record", 
           data: parseCompanyFromGLEIF(result.data) 
-        };
+          };
       }
     }
     
@@ -287,8 +286,25 @@ export const fetchParentCompany = async (company: any): Promise<{
   try {
     const relationships = company.relationships.directParent;
     
-    // Check for reporting exception first
+    // Check for direct LEI record link - use this first if available
+    if (relationships.leiRecord) {
+      console.log("Fetching parent directly using lei-record link:", relationships.leiRecord);
+      const response = await fetch(relationships.leiRecord);
+      const leiData = await response.json();
+      
+      if (leiData.data) {
+        const parentEntity = parseCompanyFromGLEIF(leiData.data);
+        console.log("Found parent entity:", parentEntity.name);
+        return { 
+          parentEntity, 
+          parentException: null 
+        };
+      }
+    }
+    
+    // Check for reporting exception
     if (relationships.reportingException) {
+      console.log("Processing parent reporting exception:", relationships.reportingException);
       const exceptionResult = await followRelationshipLink(relationships.reportingException);
       
       if (exceptionResult && exceptionResult.type === "exception") {
@@ -299,43 +315,9 @@ export const fetchParentCompany = async (company: any): Promise<{
       }
     }
     
-    // Try the direct related link (entity relationship)
-    if (relationships.related) {
-      console.log("Fetching parent using related link:", relationships.related);
-      const response = await fetch(relationships.related);
-      const result = await response.json();
-      
-      if (result.data && result.data.relationships?.["lei-record"]?.links?.related) {
-        // Follow the link to the LEI record
-        const leiUrl = result.data.relationships["lei-record"].links.related;
-        const leiResponse = await fetch(leiUrl);
-        const leiData = await leiResponse.json();
-        
-        if (leiData.data) {
-          const parentEntity = parseCompanyFromGLEIF(leiData.data);
-          console.log("Found parent entity:", parentEntity.name);
-          return { 
-            parentEntity, 
-            parentException: null 
-          };
-        }
-      }
-    }
-    
-    // Then check for direct LEI record link
-    if (relationships.leiRecord) {
-      const recordResult = await followRelationshipLink(relationships.leiRecord);
-      
-      if (recordResult && recordResult.type === "lei-record") {
-        return { 
-          parentEntity: recordResult.data, 
-          parentException: null 
-        };
-      }
-    }
-    
-    // As a fallback, try the relationship record which might contain a link to the LEI record
+    // If no direct link or exception, try the relationship record
     if (relationships.relationshipRecord) {
+      console.log("Following parent relationship record:", relationships.relationshipRecord);
       const recordResult = await followRelationshipLink(relationships.relationshipRecord);
       
       if (recordResult && recordResult.type === "lei-record") {
@@ -366,8 +348,25 @@ export const fetchUltimateParentCompany = async (company: any): Promise<{
   try {
     const relationships = company.relationships.ultimateParent;
     
-    // Check for reporting exception first
+    // Check for direct LEI record link - use this first if available
+    if (relationships.leiRecord) {
+      console.log("Fetching ultimate parent directly using lei-record link:", relationships.leiRecord);
+      const response = await fetch(relationships.leiRecord);
+      const leiData = await response.json();
+      
+      if (leiData.data) {
+        const parentEntity = parseCompanyFromGLEIF(leiData.data);
+        console.log("Found ultimate parent entity:", parentEntity.name);
+        return { 
+          parentEntity, 
+          parentException: null 
+        };
+      }
+    }
+    
+    // Check for reporting exception
     if (relationships.reportingException) {
+      console.log("Processing ultimate parent reporting exception:", relationships.reportingException);
       const exceptionResult = await followRelationshipLink(relationships.reportingException);
       
       if (exceptionResult && exceptionResult.type === "exception") {
@@ -378,43 +377,9 @@ export const fetchUltimateParentCompany = async (company: any): Promise<{
       }
     }
     
-    // Try the direct related link (entity relationship)
-    if (relationships.related) {
-      console.log("Fetching ultimate parent using related link:", relationships.related);
-      const response = await fetch(relationships.related);
-      const result = await response.json();
-      
-      if (result.data && result.data.relationships?.["lei-record"]?.links?.related) {
-        // Follow the link to the LEI record
-        const leiUrl = result.data.relationships["lei-record"].links.related;
-        const leiResponse = await fetch(leiUrl);
-        const leiData = await leiResponse.json();
-        
-        if (leiData.data) {
-          const parentEntity = parseCompanyFromGLEIF(leiData.data);
-          console.log("Found ultimate parent entity:", parentEntity.name);
-          return { 
-            parentEntity, 
-            parentException: null 
-          };
-        }
-      }
-    }
-    
-    // Then check for direct LEI record link
-    if (relationships.leiRecord) {
-      const recordResult = await followRelationshipLink(relationships.leiRecord);
-      
-      if (recordResult && recordResult.type === "lei-record") {
-        return { 
-          parentEntity: recordResult.data, 
-          parentException: null 
-        };
-      }
-    }
-    
-    // As a fallback, try the relationship record which might contain a link to the LEI record
+    // If no direct link or exception, try the relationship record
     if (relationships.relationshipRecord) {
+      console.log("Following ultimate parent relationship record:", relationships.relationshipRecord);
       const recordResult = await followRelationshipLink(relationships.relationshipRecord);
       
       if (recordResult && recordResult.type === "lei-record") {

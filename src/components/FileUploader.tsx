@@ -6,11 +6,15 @@ interface CompanyRelationships {
     reportingException?: string;
     related?: string;
     reason?: string;
+    leiRecord?: string;
+    relationshipRecord?: string;
   };
   ultimateParent?: {
     reportingException?: string;
     related?: string;
     reason?: string;
+    leiRecord?: string;
+    relationshipRecord?: string;
   };
   directChildren?: {
     related?: string;
@@ -203,21 +207,25 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           if (record.relationships?.["direct-parent"]) {
             const directParentLinks = record.relationships["direct-parent"].links || {};
             
+            relationships.directParent = {};
+            
+            if (directParentLinks["lei-record"]) {
+              relationships.directParent.leiRecord = directParentLinks["lei-record"];
+              hasDirectParent = true;
+            }
+            
             if (directParentLinks["relationship-record"]) {
-              relationships.directParent = {
-                related: directParentLinks["relationship-record"]
-              };
+              relationships.directParent.relationshipRecord = directParentLinks["relationship-record"];
               hasDirectParent = true;
-            } else if (directParentLinks["reporting-exception"]) {
-              relationships.directParent = {
-                reportingException: directParentLinks["reporting-exception"],
-                reason: "EXCEPTION" // Will be replaced with actual reason later
-              };
+            }
+            
+            if (directParentLinks["reporting-exception"]) {
+              relationships.directParent.reportingException = directParentLinks["reporting-exception"];
               hasDirectParent = true;
-            } else if (directParentLinks["lei-record"]) {
-              relationships.directParent = {
-                related: directParentLinks["lei-record"]
-              };
+            }
+            
+            if (directParentLinks["related"]) {
+              relationships.directParent.related = directParentLinks["related"];
               hasDirectParent = true;
             }
           }
@@ -226,21 +234,25 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           if (record.relationships?.["ultimate-parent"]) {
             const ultimateParentLinks = record.relationships["ultimate-parent"].links || {};
             
+            relationships.ultimateParent = {};
+            
+            if (ultimateParentLinks["lei-record"]) {
+              relationships.ultimateParent.leiRecord = ultimateParentLinks["lei-record"];
+              hasUltimateParent = true;
+            }
+            
             if (ultimateParentLinks["relationship-record"]) {
-              relationships.ultimateParent = {
-                related: ultimateParentLinks["relationship-record"]
-              };
+              relationships.ultimateParent.relationshipRecord = ultimateParentLinks["relationship-record"];
               hasUltimateParent = true;
-            } else if (ultimateParentLinks["reporting-exception"]) {
-              relationships.ultimateParent = {
-                reportingException: ultimateParentLinks["reporting-exception"],
-                reason: "EXCEPTION" // Will be replaced with actual reason later
-              };
+            }
+            
+            if (ultimateParentLinks["reporting-exception"]) {
+              relationships.ultimateParent.reportingException = ultimateParentLinks["reporting-exception"];
               hasUltimateParent = true;
-            } else if (ultimateParentLinks["lei-record"]) {
-              relationships.ultimateParent = {
-                related: ultimateParentLinks["lei-record"]
-              };
+            }
+            
+            if (ultimateParentLinks["related"]) {
+              relationships.ultimateParent.related = ultimateParentLinks["related"];
               hasUltimateParent = true;
             }
           }
