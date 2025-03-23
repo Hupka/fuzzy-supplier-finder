@@ -6,9 +6,14 @@ interface CompanyRelationships {
   directParent?: {
     reportingException?: string;
     related?: string;
+    reason?: string;
   };
   ultimateParent?: {
     reportingException?: string;
+    related?: string;
+    reason?: string;
+  };
+  directChildren?: {
     related?: string;
   };
 }
@@ -26,7 +31,9 @@ interface Company {
   initialRegistrationDate?: string;
   lastUpdateDate?: string;
   entityCategory?: string;
-  hasParent?: boolean;
+  hasDirectParent: boolean;
+  hasUltimateParent: boolean;
+  hasChildren: boolean;
   relationships?: CompanyRelationships;
 }
 
@@ -94,7 +101,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
     window.Papa.parse(file, {
       header: true,
       complete: async (results: { data: Supplier[], errors: any[], meta: any }) => {
-        console.log("Raw CSV data:", results.data); // Add debug logging
+        console.log("Raw CSV data:", results.data); 
         
         const suppliers = results.data
           .filter(supplier => {
@@ -113,7 +120,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             return { ...supplier, ...normalizedSupplier };
           });
         
-        console.log("Processed suppliers:", suppliers); // Add debug logging
+        console.log("Processed suppliers:", suppliers);
         
         if (suppliers.length === 0) {
           toast.error("No valid supplier data found in CSV");
@@ -179,34 +186,71 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
           
           const formattedAddress = addressParts.join(', ');
           
-          // Extract relationship links
+          // Extract relationship links with improved handling
           const relationships: CompanyRelationships = {};
           
-          if (record.relationships) {
-            if (record.relationships["direct-parent"]) {
-              relationships.directParent = {
-                reportingException: record.relationships["direct-parent"].links?.reporting 
-                  ? undefined 
-                  : record.relationships["direct-parent"].links?.["reporting-exception"],
-                related: record.relationships["direct-parent"].links?.related
-              };
-            }
+          // Check for direct parent relationship
+          let hasDirectParent = false;
+          if (record.relationships?.["direct-parent"]) {
+            const directParentLinks = record.relationships["direct-parent"].links || {};
             
-            if (record.relationships["ultimate-parent"]) {
-              relationships.ultimateParent = {
-                reportingException: record.relationships["ultimate-parent"].links?.reporting 
-                  ? undefined 
-                  : record.relationships["ultimate-parent"].links?.["reporting-exception"],
-                related: record.relationships["ultimate-parent"].links?.related
+            // Check for both relationship record and exception
+            if (directParentLinks["relationship-record"]) {
+              relationships.directParent = {
+                related: directParentLinks["relationship-record"]
               };
+              hasDirectParent = true;
+            } else if (directParentLinks["reporting-exception"]) {
+              relationships.directParent = {
+                reportingException: directParentLinks["reporting-exception"],
+                reason: "EXCEPTION" // Will be replaced with actual reason later
+              };
+              hasDirectParent = true;
+            } else if (directParentLinks["lei-record"]) {
+              relationships.directParent = {
+                related: directParentLinks["lei-record"]
+              };
+              hasDirectParent = true;
             }
           }
           
-          // Check for parent relationships
-          const hasDirectParent = !!entity.associatedEntity?.lei || 
-            (record.relationships && 
-             record.relationships["direct-parent"] && 
-             !record.relationships["direct-parent"].links?.reporting);
+          // Check for ultimate parent relationship
+          let hasUltimateParent = false;
+          if (record.relationships?.["ultimate-parent"]) {
+            const ultimateParentLinks = record.relationships["ultimate-parent"].links || {};
+            
+            // Check for both relationship record and exception
+            if (ultimateParentLinks["relationship-record"]) {
+              relationships.ultimateParent = {
+                related: ultimateParentLinks["relationship-record"]
+              };
+              hasUltimateParent = true;
+            } else if (ultimateParentLinks["reporting-exception"]) {
+              relationships.ultimateParent = {
+                reportingException: ultimateParentLinks["reporting-exception"],
+                reason: "EXCEPTION" // Will be replaced with actual reason later
+              };
+              hasUltimateParent = true;
+            } else if (ultimateParentLinks["lei-record"]) {
+              relationships.ultimateParent = {
+                related: ultimateParentLinks["lei-record"]
+              };
+              hasUltimateParent = true;
+            }
+          }
+          
+          // Check for direct children
+          let hasChildren = false;
+          if (record.relationships?.["direct-children"]) {
+            const directChildrenLinks = record.relationships["direct-children"].links || {};
+            
+            if (directChildrenLinks["related"]) {
+              relationships.directChildren = {
+                related: directChildrenLinks["related"]
+              };
+              hasChildren = true;
+            }
+          }
           
           // Create full legal form string if available
           const legalFormString = entity.legalForm && entity.legalForm.id
@@ -231,11 +275,44 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileLoaded }) => {
             initialRegistrationDate: attributes.registration.initialRegistrationDate,
             lastUpdateDate: attributes.registration.lastUpdateDate,
             entityCategory: entityCategoryString,
-            hasParent: hasDirectParent,
+            hasDirectParent: hasDirectParent,
+            hasUltimateParent: hasUltimateParent,
+            hasChildren: hasChildren,
             relationships: relationships
           };
           
           matchedCount++;
+          
+          // If we found relationships, try to get more details for the first few entities
+          if ((hasDirectParent || hasUltimateParent) && i < 10) {
+            // Fetch exception details for direct parent if it exists
+            if (hasDirectParent && relationships.directParent?.reportingException) {
+              try {
+                const exceptionResponse = await fetch(relationships.directParent.reportingException);
+                const exceptionData = await exceptionResponse.json();
+                
+                if (exceptionData.data && exceptionData.data.attributes) {
+                  relationships.directParent.reason = exceptionData.data.attributes.reason;
+                }
+              } catch (error) {
+                console.error("Error fetching direct parent exception details:", error);
+              }
+            }
+            
+            // Fetch exception details for ultimate parent if it exists
+            if (hasUltimateParent && relationships.ultimateParent?.reportingException) {
+              try {
+                const exceptionResponse = await fetch(relationships.ultimateParent.reportingException);
+                const exceptionData = await exceptionResponse.json();
+                
+                if (exceptionData.data && exceptionData.data.attributes) {
+                  relationships.ultimateParent.reason = exceptionData.data.attributes.reason;
+                }
+              } catch (error) {
+                console.error("Error fetching ultimate parent exception details:", error);
+              }
+            }
+          }
         } else {
           supplier.company = null;
         }

@@ -8,9 +8,10 @@ import {
   CardContent 
 } from "@/components/ui/card";
 import { getLegalFormDescription, getStatusDescription, getReportingExceptionDescription } from "@/utils/companyUtils";
-import { Network, Building2, Calendar, Globe, FileText } from "lucide-react";
+import { Network, Building2, Calendar, Globe, FileText, AlertCircle } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface CompanyDetailsProps {
   company: any;
@@ -18,6 +19,26 @@ interface CompanyDetailsProps {
 
 const CompanyDetails: React.FC<CompanyDetailsProps> = ({ company }) => {
   if (!company) return null;
+
+  // Helper function to render exception information with a tooltip
+  const renderExceptionInfo = (reason: string) => (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex items-center text-amber-600">
+            <AlertCircle className="h-3.5 w-3.5 mr-1" />
+            Exception: {getReportingExceptionDescription(reason)}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          <p className="text-xs">
+            This entity has a parent, but detailed information is not available due to a reporting exception. 
+            The reason provided is: {getReportingExceptionDescription(reason)}
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 
   return (
     <div className="space-y-6">
@@ -154,7 +175,7 @@ const CompanyDetails: React.FC<CompanyDetailsProps> = ({ company }) => {
               <span>
                 {company.hasDirectParent 
                   ? (company.relationships?.directParent?.reportingException
-                     ? `Exception: ${getReportingExceptionDescription(company.relationships.directParent.reason || "NATURAL_PERSONS")}`
+                     ? renderExceptionInfo(company.relationships?.directParent?.reason || "NATURAL_PERSONS")
                      : "Available in Corporate Hierarchy")
                   : "No direct parent"}
               </span>
@@ -163,7 +184,7 @@ const CompanyDetails: React.FC<CompanyDetailsProps> = ({ company }) => {
               <span>
                 {company.hasUltimateParent 
                   ? (company.relationships?.ultimateParent?.reportingException
-                     ? `Exception: ${getReportingExceptionDescription(company.relationships.ultimateParent.reason || "NATURAL_PERSONS")}`
+                     ? renderExceptionInfo(company.relationships?.ultimateParent?.reason || "NATURAL_PERSONS")
                      : "Available in Corporate Hierarchy")
                   : "No ultimate parent"}
               </span>
