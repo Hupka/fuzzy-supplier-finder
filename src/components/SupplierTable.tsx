@@ -196,15 +196,17 @@ const SupplierTable: React.FC<SupplierTableProps> = ({ suppliers, onShowDetails 
           lei: record.id,
           address: formattedAddress,
           jurisdiction: entity.jurisdiction,
-          status: attributes.registration.status,
+          entityStatus: entity.status,
+          registrationStatus: attributes.registration.status,
           parentLei: entity.associatedEntity?.lei || undefined,
           legalForm: legalFormString,
+          legalFormId: entity.legalForm?.id,
           registrationAuthority: attributes.registration.managingLou,
           nextRenewalDate: attributes.registration.nextRenewalDate,
           initialRegistrationDate: attributes.registration.initialRegistrationDate,
           lastUpdateDate: attributes.registration.lastUpdateDate,
           entityCategory: entityCategoryString,
-          hasParent: hasDirectParent
+          hasDirectParent: hasDirectParent
         };
         
         // Check for children
